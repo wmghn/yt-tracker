@@ -6,21 +6,11 @@ interface Props {
   onSuccess: (videos: VideoRow[], detectedOptional: OptionalColumnKey[]) => void;
 }
 
-interface ColumnStatus {
-  key: string;
-  label: string;
-  found: boolean;
-  required: boolean;
-}
-
+interface ColStatus { key: string; label: string; found: boolean; required: boolean; }
 interface ParseState {
   status: "idle" | "success" | "error";
-  message?: string;
-  videoCount?: number;
-  skipped?: number;
-  columns?: ColumnStatus[];
-  detectedOptional?: OptionalColumnKey[];
-  videos?: VideoRow[];
+  message?: string; videoCount?: number; skipped?: number;
+  columns?: ColStatus[]; detectedOptional?: OptionalColumnKey[]; videos?: VideoRow[];
 }
 
 export default function UploadZone({ onSuccess }: Props) {
@@ -30,51 +20,18 @@ export default function UploadZone({ onSuccess }: Props) {
 
   const processBuffer = (buffer: ArrayBuffer, filename: string) => {
     const parsed = parseYouTubeExport(buffer);
-
     if (!parsed.success) {
-      const missingCols = (parsed.missing ?? []).map((name) => ({
-        key: name,
-        label: name,
-        found: false,
-        required: true,
-      }));
-
-      const foundCols = Object.entries(REQUIRED_COLUMNS)
+      const found = Object.entries(REQUIRED_COLUMNS)
         .filter(([, name]) => !(parsed.missing ?? []).includes(name))
         .map(([, name]) => ({ key: name, label: name, found: true, required: true }));
-
-      setResult({
-        status: "error",
-        message: parsed.error,
-        columns: [...foundCols, ...missingCols],
-      });
+      const missing = (parsed.missing ?? []).map((name) => ({ key: name, label: name, found: false, required: true }));
+      setResult({ status: "error", message: parsed.error, columns: [...found, ...missing] });
       return;
     }
-
-    // Build column status for display
-    const allReqCols: ColumnStatus[] = Object.entries(REQUIRED_COLUMNS).map(([, name]) => ({
-      key: name,
-      label: name,
-      found: true,
-      required: true,
-    }));
-
-    const optCols: ColumnStatus[] = (parsed.detectedOptional ?? []).map((key) => ({
-      key,
-      label: OPTIONAL_COLUMN_LABELS[key],
-      found: true,
-      required: false,
-    }));
-
-    setResult({
-      status: "success",
-      videoCount: parsed.rows.length,
-      skipped: parsed.skipped,
-      columns: [...allReqCols, ...optCols],
-      detectedOptional: parsed.detectedOptional,
-      videos: parsed.rows,
-      message: filename,
-    });
+    const reqCols: ColStatus[] = Object.entries(REQUIRED_COLUMNS).map(([, name]) => ({ key: name, label: name, found: true, required: true }));
+    const optCols: ColStatus[] = (parsed.detectedOptional ?? []).map((key) => ({ key, label: OPTIONAL_COLUMN_LABELS[key], found: true, required: false }));
+    setResult({ status: "success", videoCount: parsed.rows.length, skipped: parsed.skipped,
+      columns: [...reqCols, ...optCols], detectedOptional: parsed.detectedOptional, videos: parsed.rows, message: filename });
   };
 
   const readFile = (file: File) => {
@@ -83,110 +40,88 @@ export default function UploadZone({ onSuccess }: Props) {
       return;
     }
     const reader = new FileReader();
-    reader.onload = (e) => {
-      processBuffer(e.target!.result as ArrayBuffer, file.name);
-    };
+    reader.onload = (e) => processBuffer(e.target!.result as ArrayBuffer, file.name);
     reader.readAsArrayBuffer(file);
-  };
-
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    setDragging(false);
-    const file = e.dataTransfer.files[0];
-    if (file) readFile(file);
-  };
-
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) readFile(file);
-    e.target.value = "";
   };
 
   return (
     <div className="max-w-2xl mx-auto">
-      <div className="mb-8">
-        <h1 className="text-2xl font-semibold text-white mb-2">Upload YouTube Analytics</h1>
-        <p className="text-slate-400 text-sm">
-          Export từ YouTube Studio → Analytics → Content → Xuất → chọn định dạng Excel hoặc CSV.
+      <div className="mb-10">
+        <h1 className="text-3xl font-bold text-ink mb-3">Upload YouTube Analytics</h1>
+        <p className="text-base text-ink-tertiary leading-relaxed">
+          Vào YouTube Studio → Analytics → Content → Xuất dữ liệu → tải file Excel hoặc CSV.
         </p>
       </div>
 
       {/* Drop zone */}
       <div
-        className={`
-          border-2 border-dashed rounded-xl p-12 text-center cursor-pointer transition-all
-          ${dragging ? "border-accent bg-accent/5" : "border-border hover:border-white/20"}
-        `}
+        className={`border-2 border-dashed rounded-2xl p-16 text-center cursor-pointer transition-all duration-200 ${
+          dragging ? "border-accent bg-accent-light" : "border-border-strong hover:border-accent hover:bg-accent-muted"
+        }`}
         onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
         onDragLeave={() => setDragging(false)}
-        onDrop={handleDrop}
+        onDrop={(e) => { e.preventDefault(); setDragging(false); const f = e.dataTransfer.files[0]; if (f) readFile(f); }}
         onClick={() => inputRef.current?.click()}
       >
-        <input ref={inputRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleChange} />
-        <div className="w-12 h-12 rounded-xl bg-surface-2 border border-border flex items-center justify-center mx-auto mb-4">
-          <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
-            <path d="M11 14V4M11 4L7.5 7.5M11 4L14.5 7.5" stroke="#00d084" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-            <path d="M3 15v2a2 2 0 002 2h12a2 2 0 002-2v-2" stroke="rgba(255,255,255,0.3)" strokeWidth="1.5" strokeLinecap="round"/>
+        <input ref={inputRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) readFile(f); e.target.value = ""; }} />
+        <div className="w-16 h-16 rounded-2xl bg-accent-muted border-2 border-accent/20 flex items-center justify-center mx-auto mb-5">
+          <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
+            <path d="M14 18V6M14 6L9 11M14 6L19 11" stroke="#2563EB" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+            <path d="M4 19v3a2 2 0 002 2h16a2 2 0 002-2v-3" stroke="#2563EB" strokeWidth="2" strokeLinecap="round" opacity="0.4"/>
           </svg>
         </div>
-        <p className="text-white font-medium mb-1">Kéo thả file vào đây</p>
-        <p className="text-slate-500 text-sm">hoặc click để chọn file · .xlsx .xls .csv</p>
+        <p className="text-lg font-semibold text-ink mb-1.5">Kéo thả file vào đây</p>
+        <p className="text-sm text-ink-muted">hoặc click để chọn · .xlsx · .xls · .csv</p>
       </div>
 
       {/* Result */}
       {result.status !== "idle" && (
-        <div className={`mt-4 card p-5 animate-in ${result.status === "error" ? "border-red-500/30" : "border-accent/20"}`}>
+        <div className={`mt-5 card p-6 animate-in ${result.status === "error" ? "border-red-200 bg-red-50/50" : "border-emerald-200 bg-emerald-50/30"}`}>
           {result.status === "success" ? (
             <>
-              <div className="flex items-center gap-2 mb-4">
-                <span className="w-5 h-5 rounded-full bg-accent/20 text-accent flex items-center justify-center text-xs">✓</span>
-                <span className="text-white font-medium text-sm">{result.videoCount} videos loaded</span>
-                {result.skipped ? (
-                  <span className="text-slate-500 text-xs">· {result.skipped} dòng bỏ qua</span>
-                ) : null}
-                <span className="ml-auto text-slate-500 text-xs font-mono truncate max-w-[180px]">{result.message}</span>
+              <div className="flex items-center gap-3 mb-5">
+                <div className="w-8 h-8 rounded-full bg-emerald-100 border border-emerald-200 flex items-center justify-center text-emerald-700 font-bold text-sm">✓</div>
+                <div>
+                  <p className="font-semibold text-ink">{result.videoCount} videos đã load</p>
+                  <p className="text-sm text-ink-tertiary">{result.message}{result.skipped ? ` · ${result.skipped} dòng bỏ qua` : ""}</p>
+                </div>
               </div>
-
-              <div className="space-y-1.5">
+              <div className="space-y-2 mb-5">
                 {result.columns?.map((col) => (
-                  <div key={col.key} className="flex items-center gap-2 text-xs">
-                    <span className={col.found ? "text-accent" : "text-red-400"}>
+                  <div key={col.key} className="flex items-center gap-3 text-sm">
+                    <span className={`w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold ${col.found ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-600"}`}>
                       {col.found ? "✓" : "✗"}
                     </span>
-                    <span className={col.found ? "text-slate-300" : "text-red-400"}>{col.label}</span>
-                    <span className="text-slate-600">
-                      {col.required ? "(bắt buộc)" : "(tuỳ chọn — có trong file)"}
-                    </span>
+                    <span className={col.found ? "text-ink-secondary" : "text-red-600 font-medium"}>{col.label}</span>
+                    <span className="text-ink-muted text-xs">{col.required ? "bắt buộc" : "tuỳ chọn"}</span>
                   </div>
                 ))}
               </div>
-
-              <button
-                className="btn-primary mt-5 w-full"
-                onClick={() => onSuccess(result.videos!, result.detectedOptional!)}
-              >
+              <button className="btn-primary w-full text-base" onClick={() => onSuccess(result.videos!, result.detectedOptional!)}>
                 Tiếp theo →
               </button>
             </>
           ) : (
             <>
-              <div className="flex items-center gap-2 mb-3">
-                <span className="w-5 h-5 rounded-full bg-red-500/20 text-red-400 flex items-center justify-center text-xs">✗</span>
-                <span className="text-red-400 font-medium text-sm">Upload thất bại</span>
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-8 h-8 rounded-full bg-red-100 border border-red-200 flex items-center justify-center text-red-600 font-bold text-sm">✗</div>
+                <div>
+                  <p className="font-semibold text-red-700">Upload thất bại</p>
+                  <p className="text-sm text-red-500">{result.message}</p>
+                </div>
               </div>
-              <p className="text-slate-400 text-xs mb-3">{result.message}</p>
-              {result.columns && result.columns.length > 0 && (
-                <div className="space-y-1">
+              {result.columns && (
+                <div className="space-y-2">
                   {result.columns.map((col) => (
-                    <div key={col.key} className="flex items-center gap-2 text-xs">
-                      <span className={col.found ? "text-accent" : "text-red-400"}>{col.found ? "✓" : "✗"}</span>
-                      <span className={col.found ? "text-slate-400" : "text-red-400"}>{col.label}</span>
+                    <div key={col.key} className="flex items-center gap-2 text-sm">
+                      <span className={`w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold ${col.found ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-600"}`}>{col.found ? "✓" : "✗"}</span>
+                      <span className={col.found ? "text-ink-tertiary" : "text-red-600"}>{col.label}</span>
                     </div>
                   ))}
                 </div>
               )}
-              <p className="text-slate-500 text-xs mt-3">
-                Tên cột bắt buộc: <span className="font-mono text-slate-400">Nội dung · Tiêu đề video · Số lượt xem</span>
+              <p className="text-xs text-ink-muted mt-4 p-3 bg-surface-2 rounded-lg">
+                Tên cột bắt buộc: <span className="font-mono font-medium text-ink-secondary">Nội dung · Tiêu đề video · Số lượt xem</span>
               </p>
             </>
           )}

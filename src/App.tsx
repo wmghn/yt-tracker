@@ -1,109 +1,126 @@
 import { useState, useEffect, useCallback } from "react";
-import type { AppState, StaffMember, GroupConfig, OptionalColumnKey, VideoRow } from "@/types";
-import { INITIAL_STATE, DEFAULT_CONFIG } from "@/types";
+import type { AppState, StaffMember, OptionalColumnKey, VideoRow } from "@/types";
+import { INITIAL_STATE } from "@/types";
+import { GROUPS } from "@/config/groups";
 import { saveSession, loadSession, clearSession } from "@/lib/storage/session-storage";
 import { computeAttribution } from "@/lib/services/attribution";
 
-import UploadZone from "@/components/features/UploadZone";
-import WeightConfig from "@/components/features/WeightConfig";
-import StaffPanel from "@/components/features/StaffPanel";
+import UploadZone   from "@/components/features/UploadZone";
+import StaffPanel   from "@/components/features/StaffPanel";
 import ResultsTable from "@/components/features/ResultsTable";
 
 const STEPS = [
   { n: 1, label: "Upload file" },
-  { n: 2, label: "Cấu hình" },
-  { n: 3, label: "Nhân sự" },
-  { n: 4, label: "Kết quả" },
+  { n: 2, label: "Nhân sự" },
+  { n: 3, label: "Kết quả" },
 ];
 
-export default function App() {
-  const [state, setState] = useState<AppState>(() => loadSession() ?? INITIAL_STATE);
+// Default weights from config file
+const DEFAULT_WEIGHTS: Record<string, number> = Object.fromEntries(
+  GROUPS.map((g) => [g.key, g.weight])
+);
 
-  // Persist on every change
-  useEffect(() => {
-    saveSession(state);
-  }, [state]);
+export default function App() {
+  const [state, setState] = useState<AppState>(() => {
+    const saved = loadSession();
+    // Ensure weights always has all group keys (handles adding new groups after old session)
+    if (saved) {
+      const merged = { ...DEFAULT_WEIGHTS, ...saved.weights };
+      return { ...saved, weights: merged };
+    }
+    return { ...INITIAL_STATE, weights: DEFAULT_WEIGHTS };
+  });
+
+  useEffect(() => { saveSession(state); }, [state]);
 
   const patch = useCallback((partial: Partial<AppState>) => {
     setState((prev) => ({ ...prev, ...partial }));
   }, []);
 
-  const handleUpload = (
-    videos: VideoRow[],
-    detectedOptional: OptionalColumnKey[]
-  ) => {
+  const handleUpload = (videos: VideoRow[], detectedOptional: OptionalColumnKey[]) => {
     setState({
       ...INITIAL_STATE,
       step: 2,
       videos,
       detectedOptional,
-      config: DEFAULT_CONFIG,
       staffList: [],
+      weights: DEFAULT_WEIGHTS,
     });
   };
 
-  const handleNewSession = () => {
-    clearSession();
-    setState(INITIAL_STATE);
-  };
+  const handleNewSession = () => { clearSession(); setState({ ...INITIAL_STATE, weights: DEFAULT_WEIGHTS }); };
 
-  const results =
-    state.step === 4
-      ? computeAttribution(state.videos, state.config, state.staffList)
-      : [];
+  const results = state.step === 3
+    ? computeAttribution(state.videos, state.staffList, state.weights)
+    : [];
+
+  const totalWeight = Object.values(state.weights).reduce((s, v) => s + v, 0);
 
   return (
     <div className="min-h-screen bg-surface">
       {/* Header */}
-      <header className="border-b border-border px-6 py-4 flex items-center justify-between">
+      <header className="bg-surface-1 border-b border-border px-8 py-4 flex items-center justify-between sticky top-0 z-10">
         <div className="flex items-center gap-3">
-          <div className="w-7 h-7 rounded-md bg-accent/20 border border-accent/30 flex items-center justify-center">
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-              <path d="M2 10L5.5 4L8 7.5L10 5.5L12 10H2Z" fill="#00d084" />
+          <div className="w-8 h-8 rounded-lg bg-accent flex items-center justify-center shadow-sm">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+              <path d="M2 11.5L6 4.5L9 9L11.5 6L14 11.5H2Z" fill="white" fillOpacity="0.9"/>
             </svg>
           </div>
-          <span className="text-sm font-medium text-white">Views Tracker</span>
+          <span className="text-lg font-bold text-ink">Views Tracker</span>
         </div>
-        {state.step > 1 && (
-          <button onClick={handleNewSession} className="btn-ghost text-xs py-1.5 px-3">
-            ↺ Session mới
-          </button>
-        )}
+
+        <div className="flex items-center gap-4">
+          {/* Live weight pills */}
+          <div className="flex items-center gap-2">
+            {GROUPS.map((g) => {
+              const w = state.weights[g.key] ?? g.weight;
+              return (
+                <span key={g.key}
+                  className={`text-xs font-semibold px-2.5 py-1 rounded-full border ${g.color.bg} ${g.color.text} ${g.color.border}`}>
+                  {g.label} {w}%
+                </span>
+              );
+            })}
+            {totalWeight !== 100 && (
+              <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-red-50 text-red-600 border border-red-200">
+                Tổng = {totalWeight}% ≠ 100
+              </span>
+            )}
+          </div>
+          {state.step > 1 && (
+            <button onClick={handleNewSession} className="btn-ghost btn-sm text-ink-tertiary">
+              ↺ Session mới
+            </button>
+          )}
+        </div>
       </header>
 
-      {/* Step indicator */}
-      <div className="border-b border-border px-6 py-0">
-        <div className="flex">
+      {/* Step bar */}
+      <div className="bg-surface-1 border-b border-border px-8">
+        <div className="flex gap-1 max-w-5xl mx-auto">
           {STEPS.map((s, i) => {
             const active = s.n === state.step;
-            const done = s.n < state.step;
+            const done   = s.n < state.step;
             return (
               <div key={s.n} className="flex items-center">
                 <button
-                  onClick={() => {
-                    if (done) patch({ step: s.n as AppState["step"] });
-                  }}
+                  onClick={() => { if (done) patch({ step: s.n as AppState["step"] }); }}
                   disabled={s.n > state.step}
-                  className={`
-                    flex items-center gap-2 py-3.5 px-4 text-xs font-medium border-b-2 transition-colors
-                    ${active ? "border-accent text-accent" : "border-transparent"}
-                    ${done ? "text-slate-400 hover:text-white cursor-pointer" : ""}
-                    ${!active && !done ? "text-slate-600 cursor-default" : ""}
-                  `}
-                >
-                  <span className={`
-                    w-5 h-5 rounded-full text-[10px] flex items-center justify-center font-medium
-                    ${active ? "bg-accent text-surface" : ""}
-                    ${done ? "bg-surface-3 text-slate-400" : ""}
-                    ${!active && !done ? "bg-surface-2 text-slate-600 border border-border" : ""}
-                  `}>
+                  className={`flex items-center gap-2.5 py-4 px-3 text-sm font-medium border-b-2 transition-all ${
+                    active ? "border-accent text-accent"
+                    : done  ? "border-transparent text-ink-tertiary hover:text-ink cursor-pointer"
+                    : "border-transparent text-ink-muted cursor-default"
+                  }`}>
+                  <span className={`w-6 h-6 rounded-full text-xs flex items-center justify-center font-bold transition-all ${
+                    active ? "bg-accent text-white"
+                    : done  ? "bg-emerald-100 text-emerald-700"
+                    : "bg-surface-2 text-ink-muted border border-border"
+                  }`}>
                     {done ? "✓" : s.n}
                   </span>
                   {s.label}
                 </button>
-                {i < STEPS.length - 1 && (
-                  <span className="text-slate-700 text-xs px-1">›</span>
-                )}
+                {i < STEPS.length - 1 && <span className="text-border-strong text-base px-1">›</span>}
               </div>
             );
           })}
@@ -111,32 +128,25 @@ export default function App() {
       </div>
 
       {/* Content */}
-      <main className="max-w-5xl mx-auto px-6 py-8 animate-in">
-        {state.step === 1 && (
-          <UploadZone onSuccess={handleUpload} />
-        )}
+      <main className="max-w-5xl mx-auto px-6 py-10 animate-in">
+        {state.step === 1 && <UploadZone onSuccess={handleUpload} />}
         {state.step === 2 && (
-          <WeightConfig
-            config={state.config}
-            onChange={(config: GroupConfig) => patch({ config })}
-            onNext={() => patch({ step: 3 })}
-          />
-        )}
-        {state.step === 3 && (
           <StaffPanel
             staffList={state.staffList}
             videos={state.videos}
+            weights={state.weights}
             onChange={(staffList: StaffMember[]) => patch({ staffList })}
-            onNext={() => patch({ step: 4 })}
-            onBack={() => patch({ step: 2 })}
+            onWeightsChange={(weights: Record<string, number>) => patch({ weights })}
+            onNext={() => patch({ step: 3 })}
+            onBack={() => patch({ step: 1 })}
           />
         )}
-        {state.step === 4 && (
+        {state.step === 3 && (
           <ResultsTable
             results={results}
-            config={state.config}
+            weights={state.weights}
             detectedOptional={state.detectedOptional}
-            onBack={() => patch({ step: 3 })}
+            onBack={() => patch({ step: 2 })}
           />
         )}
       </main>

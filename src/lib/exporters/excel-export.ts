@@ -1,31 +1,46 @@
 import * as XLSX from "xlsx";
 import type { StaffAttribution, ExportConfig, ExportOptionalColumn } from "@/types";
 import { OPTIONAL_COLUMN_LABELS } from "@/lib/parsers/youtube-export";
+import { GROUPS } from "@/config/groups";
+
+function getRoleLabel(role: string): string {
+  return GROUPS.find((g) => g.key === role)?.label ?? role;
+}
 
 export function exportToExcel(
-  results: StaffAttribution[],
+  allResults:   StaffAttribution[],
   exportConfig: ExportConfig,
-  filename = "views-attribution.xlsx"
+  filename?:    string
 ): void {
-  const wb = XLSX.utils.book_new();
-  const optCols = exportConfig.selectedOptional;
+  const { selectedOptional: optCols, staffFilter } = exportConfig;
 
-  // ── Sheet 1: Summary ──────────────────────────────────────────────────────
+  // Apply staff filter
+  const results = staffFilter === "all"
+    ? allResults
+    : allResults.filter((r) => r.staffId === staffFilter);
+
+  const exportName = filename
+    ?? (staffFilter === "all"
+        ? "views-attribution.xlsx"
+        : `views-${results[0]?.staffName ?? "staff"}.xlsx`);
+
+  const wb = XLSX.utils.book_new();
+
+  // ── Sheet 1: Summary ───────────────────────────────────────────────────────
   const summaryData = [
     ["Tên nhân sự", "Vai trò", "Số video", "Tổng views nhận được"],
     ...results.map((r) => [
       r.staffName,
-      r.role === "EDITOR" ? "Editor" : "Content",
+      getRoleLabel(r.role),
       r.videos.length,
       r.totalViewsEarned,
     ]),
   ];
   const wsSummary = XLSX.utils.aoa_to_sheet(summaryData);
-  // Style header row
-  wsSummary["!cols"] = [{ wch: 25 }, { wch: 12 }, { wch: 12 }, { wch: 22 }];
+  wsSummary["!cols"] = [{ wch: 25 }, { wch: 14 }, { wch: 12 }, { wch: 22 }];
   XLSX.utils.book_append_sheet(wb, wsSummary, "Summary");
 
-  // ── Sheet 2: Detail ───────────────────────────────────────────────────────
+  // ── Sheet 2: Detail ────────────────────────────────────────────────────────
   const detailHeaders = [
     "Tên nhân sự",
     "Vai trò",
@@ -48,7 +63,7 @@ export function exportToExcel(
 
       const mandatory = [
         r.staffName,
-        r.role === "EDITOR" ? "Editor" : "Content",
+        getRoleLabel(r.role),
         v.youtubeId,
         v.title,
         v.totalViews,
@@ -69,11 +84,11 @@ export function exportToExcel(
 
   const wsDetail = XLSX.utils.aoa_to_sheet([detailHeaders, ...detailRows]);
   wsDetail["!cols"] = [
-    { wch: 22 }, { wch: 10 }, { wch: 14 }, { wch: 50 },
+    { wch: 22 }, { wch: 12 }, { wch: 14 }, { wch: 50 },
     { wch: 18 }, { wch: 18 }, { wch: 35 }, { wch: 18 }, { wch: 40 },
     ...optCols.map(() => ({ wch: 22 })),
   ];
   XLSX.utils.book_append_sheet(wb, wsDetail, "Detail");
 
-  XLSX.writeFile(wb, filename);
+  XLSX.writeFile(wb, exportName);
 }

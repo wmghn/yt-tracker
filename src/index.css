@@ -4,78 +4,98 @@
 
 @layer base {
   * { box-sizing: border-box; }
-  
+
   body {
-    background-color: #0f1117;
-    color: #e2e8f0;
-    font-family: 'DM Sans', sans-serif;
+    background-color: #F7F6F3;
+    color: #1A1814;
+    font-family: 'Plus Jakarta Sans', sans-serif;
+    font-size: 16px;
+    line-height: 1.6;
     min-height: 100vh;
     -webkit-font-smoothing: antialiased;
   }
 
+  h1, h2, h3 { font-weight: 700; color: #1A1814; letter-spacing: -0.02em; }
+
   ::-webkit-scrollbar { width: 6px; height: 6px; }
-  ::-webkit-scrollbar-track { background: transparent; }
-  ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 3px; }
-  ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.25); }
+  ::-webkit-scrollbar-track { background: #F0EEE9; }
+  ::-webkit-scrollbar-thumb { background: #C8C4BC; border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: #9B9890; }
 }
 
 @layer components {
   .card {
-    @apply bg-surface-1 border border-border rounded-xl;
+    @apply bg-surface-1 border border-border rounded-2xl;
+  }
+
+  .card-subtle {
+    @apply bg-surface-2 border border-border rounded-xl;
   }
 
   .btn-primary {
-    @apply bg-accent text-surface font-medium px-5 py-2.5 rounded-lg 
-           hover:bg-accent-dim transition-colors disabled:opacity-40 
-           disabled:cursor-not-allowed text-sm;
+    @apply bg-accent text-white font-semibold px-6 py-3 rounded-xl
+           hover:bg-accent-dim transition-all duration-150
+           disabled:opacity-40 disabled:cursor-not-allowed
+           text-base shadow-sm active:scale-[0.98];
   }
 
   .btn-ghost {
-    @apply border border-border text-slate-400 px-5 py-2.5 rounded-lg
-           hover:border-white/20 hover:text-white transition-colors text-sm;
+    @apply border border-border bg-surface-1 text-ink-secondary px-5 py-3 rounded-xl
+           hover:border-border-strong hover:text-ink transition-all duration-150
+           text-base active:scale-[0.98];
+  }
+
+  .btn-sm {
+    @apply px-4 py-2 rounded-lg text-sm font-medium;
   }
 
   .input {
-    @apply bg-surface-2 border border-border rounded-lg px-3 py-2 text-sm
-           text-white placeholder-slate-500 outline-none
-           focus:border-accent/50 focus:ring-1 focus:ring-accent/20
-           transition-colors w-full;
+    @apply bg-white border border-border rounded-xl px-4 py-3 text-base
+           text-ink placeholder-ink-muted outline-none
+           focus:border-accent focus:ring-2 focus:ring-accent/10
+           transition-all duration-150 w-full;
   }
 
   .textarea {
-    @apply bg-surface-2 border border-border rounded-lg px-3 py-2 text-sm
-           text-white placeholder-slate-500 outline-none font-mono
-           focus:border-accent/50 focus:ring-1 focus:ring-accent/20
-           transition-colors w-full resize-none;
+    @apply bg-white border border-border rounded-xl px-4 py-3 text-sm
+           text-ink placeholder-ink-muted outline-none font-mono leading-relaxed
+           focus:border-accent focus:ring-2 focus:ring-accent/10
+           transition-all duration-150 w-full resize-none;
+  }
+
+  .label {
+    @apply block text-sm font-semibold text-ink-secondary mb-2;
   }
 
   .badge-editor {
-    @apply text-xs font-medium px-2 py-0.5 rounded-full 
-           bg-blue-500/15 text-blue-400 border border-blue-500/20;
+    @apply text-xs font-semibold px-2.5 py-1 rounded-full
+           bg-blue-50 text-blue-700 border border-blue-200;
   }
 
   .badge-content {
-    @apply text-xs font-medium px-2 py-0.5 rounded-full 
-           bg-purple-500/15 text-purple-400 border border-purple-500/20;
+    @apply text-xs font-semibold px-2.5 py-1 rounded-full
+           bg-violet-50 text-violet-700 border border-violet-200;
+  }
+
+  .badge-success {
+    @apply text-xs font-semibold px-2.5 py-1 rounded-full
+           bg-emerald-50 text-emerald-700 border border-emerald-200;
+  }
+
+  .tag-mono {
+    @apply text-xs font-mono px-2 py-0.5 bg-surface-2 border border-border
+           rounded-md text-ink-tertiary;
   }
 }
 
-/* Step connector */
-.step-line {
-  background: linear-gradient(to right, #00d084, transparent);
+/* Animations */
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
-
-/* Fade-in animation */
 @keyframes fadeIn {
-  from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: translateY(0); }
+  from { opacity: 0; }
+  to   { opacity: 1; }
 }
-.animate-in {
-  animation: fadeIn 0.25s ease forwards;
-}
-
-/* Drag-over highlight */
-.drag-over {
-  border-color: #00d084 !important;
-  background-color: rgba(0, 208, 132, 0.05) !important;
-}
+.animate-in  { animation: fadeUp 0.2s ease forwards; }
+.animate-fade { animation: fadeIn 0.15s ease forwards; }
