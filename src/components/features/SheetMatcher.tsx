@@ -19,6 +19,7 @@ interface SheetRow {
   staffNames:  string[];
   productLink: string;  // link SẢN PHẨM (Google Drive)
   duration:    string;  // thời lượng từ sheet, e.g. "12:34"
+  prefilledId?: string; // video ID trích từ cột Video URL (bỏ qua search nếu có)
 }
 
 type RowStatus =
@@ -42,6 +43,41 @@ const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 function parseStaffNames(raw: unknown): string[] {
   if (!raw) return [];
   return String(raw).trim().split(/[\n,;]+/).map(s => s.trim()).filter(Boolean);
+}
+
+/**
+ * Trích video ID từ YouTube URL.
+ * Xử lý mọi dạng: youtu.be/ID, ?v=ID, &v=ID, /embed/ID, /shorts/ID.
+ * Chỉ lấy đúng 11 ký tự sau v=, bỏ qua mọi tham số khác.
+ */
+function extractVideoIdFromUrl(url: string): string | null {
+  if (!url) return null;
+  const patterns = [
+    /[?&]v=([a-zA-Z0-9_-]{11})/,          // ?v=ID  hoặc  &v=ID
+    /youtu\.be\/([a-zA-Z0-9_-]{11})/,      // youtu.be/ID
+    /\/embed\/([a-zA-Z0-9_-]{11})/,        // /embed/ID
+    /\/shorts\/([a-zA-Z0-9_-]{11})/,       // /shorts/ID
+    /\/v\/([a-zA-Z0-9_-]{11})/,            // /v/ID
+  ];
+  for (const re of patterns) {
+    const m = url.match(re);
+    if (m) return m[1];
+  }
+  return null;
+}
+
+/**
+ * Lấy URL từ một cell — ưu tiên hyperlink target (Smart Link) trước,
+ * sau đó mới dùng giá trị text của cell.
+ * Trường hợp Smart Link: cell.v = display text (tiêu đề), cell.l.Target = URL thật.
+ */
+function getCellUrl(ws: XLSX.WorkSheet, rowIdx: number, colIdx: number): string {
+  if (colIdx < 0) return "";
+  const addr = XLSX.utils.encode_cell({ r: rowIdx, c: colIdx });
+  const cell = ws[addr];
+  if (!cell) return "";
+  if (cell.l?.Target) return String(cell.l.Target).trim();
+  return String(cell.v ?? "").trim();
 }
 
 /** Tìm link Google Drive trong hàng (không cần biết cột cố định) */
@@ -187,6 +223,7 @@ export default function SheetMatcher() {
         const colSearch   = findColByHeader(header, "search", "tìm kiếm", "tìmkiếm");
         const colStaff    = findColByHeader(header, "tên người làm", "tênnngườilàm", "nhân sự", "nhânsự", "staff");
         const colDuration = findColByHeader(header, "thời lượng", "thờilượng", "duration", "length");
+        const colVideoUrl = findColByHeader(header, "my video url");
         colTitleRef.current = colTitle;
 
         if (colTitle < 0) {
@@ -201,6 +238,12 @@ export default function SheetMatcher() {
           const t = String(row[colTitle]  ?? "").trim();
           const s = colSearch >= 0 ? String(row[colSearch] ?? "").trim() : "";
           if (!t && !s) continue;
+
+          // Trích video ID từ cột Video URL nếu có
+          // getCellUrl kiểm tra hyperlink target (Smart Link) trước, rồi mới đọc text
+          const urlRaw      = getCellUrl(ws, i, colVideoUrl);
+          const prefilledId = extractVideoIdFromUrl(urlRaw) ?? undefined;
+
           parsed.push({
             rowIndex:    i,
             query:       t || s,
@@ -208,6 +251,7 @@ export default function SheetMatcher() {
             staffNames:  colStaff >= 0 ? parseStaffNames(row[colStaff]) : [],
             productLink: findProductLink(row),
             duration:    colDuration >= 0 ? String(row[colDuration] ?? "").trim() : "",
+            prefilledId,
           });
         }
 
@@ -217,7 +261,11 @@ export default function SheetMatcher() {
         }
 
         const initialStates = parsed.map(row => ({
-          row, status: "pending" as RowStatus, videoId: null, matchedTitle: null, candidates: [],
+          row,
+          status:       row.prefilledId ? "confirmed" as RowStatus : "pending" as RowStatus,
+          videoId:      row.prefilledId ?? null,
+          matchedTitle: row.prefilledId ? "(from URL)" : null,
+          candidates:   [],
         }));
         setRows(parsed);
         setStates(initialStates);
@@ -405,12 +453,12 @@ export default function SheetMatcher() {
       }
     }
 
-    // Tìm cột Video ID trong header
+    // Tìm cột My Video ID trong header
     const headerRow = data[0] ?? [];
     let videoIdCol = -1;
     for (let j = 0; j < headerRow.length; j++) {
-      const cell = String(headerRow[j] ?? "").toLowerCase().replace(/\s+/g, "");
-      if (cell === "videoid" || cell === "video_id" || (cell.includes("video") && cell.includes("id"))) {
+      const cell = String(headerRow[j] ?? "").toLowerCase().trim();
+      if (cell === "my video id") {
         videoIdCol = j;
         break;
       }
@@ -421,7 +469,7 @@ export default function SheetMatcher() {
       const insertAt = (colTitleRef.current >= 0 ? colTitleRef.current : 2) + 1;
       data.forEach((row, r) => {
         while (row.length < insertAt) row.push("");
-        row.splice(insertAt, 0, r === 0 ? "Video ID" : "");
+        row.splice(insertAt, 0, r === 0 ? "My Video ID" : "");
       });
       videoIdCol = insertAt;
     }
