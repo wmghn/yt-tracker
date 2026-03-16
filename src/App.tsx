@@ -124,14 +124,14 @@ export default function App() {
             📝 Transcript
           </button> */}
 
-          {/* Tab: Match Sheet */}
+          {/* Tab: Tìm My Video ID */}
           <button
             onClick={() => setTab("match")}
             className={`flex items-center gap-2 py-3.5 px-4 text-sm font-semibold border-b-2 transition-all mr-1 ${
               tab === "match" ? "border-accent text-accent" : "border-transparent text-ink-tertiary hover:text-ink"
             }`}
           >
-            🔗 Match Sheet
+            🔍 Tìm My Video ID
           </button>
 
           {/* Tab: Staff Filter */}
