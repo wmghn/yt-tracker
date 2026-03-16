@@ -41,9 +41,14 @@ export default function StaffPanel({
 
   return (
     <div className="max-w-2xl mx-auto">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-ink mb-2">Nhân sự & Video IDs</h1>
-        <p className="text-base text-ink-tertiary">Thêm nhân sự, dán video ID, và điều chỉnh tỷ trọng.</p>
+      <div className="flex items-start justify-between mb-8">
+        <div>
+          <h1 className="text-3xl font-bold text-ink mb-2">Nhân sự & Video IDs</h1>
+          <p className="text-base text-ink-tertiary">Thêm nhân sự, dán video ID, và điều chỉnh tỷ trọng.</p>
+        </div>
+        <button onClick={onBack} className="btn-ghost btn-sm flex items-center gap-1.5 mt-1 text-ink-tertiary">
+          ✎ Sửa file Excel
+        </button>
       </div>
 
       {/* --- Inline weight editor --- */}

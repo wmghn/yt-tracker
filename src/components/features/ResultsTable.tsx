@@ -15,7 +15,7 @@ interface Props {
 export default function ResultsTable({ results, weights, detectedOptional, onBack }: Props) {
   const [expandedId,  setExpandedId]  = useState<string | null>(results[0]?.staffId ?? null);
   const [showExport,  setShowExport]  = useState(false);
-  const [countFilter, setCountFilter] = useState<number | null>(null); // null = show all
+  const [countFilter, setCountFilter] = useState<number | null>(null);
 
   // Build set of distinct contributor counts across ALL videos in ALL staff
   const allCounts = useMemo(() => {
@@ -45,7 +45,17 @@ export default function ResultsTable({ results, weights, detectedOptional, onBac
     setShowExport(false);
   };
 
+  const hasRevenue = detectedOptional.includes("revenue");
+
+  /** Revenue một nhân sự nhận được từ một video: revenue × groupWeight / membersInGroup */
+  const videoRevenueEarned = (v: { revenue?: number; groupWeight: number; membersInGroup: number }): number | undefined =>
+    v.revenue !== undefined ? v.revenue * v.groupWeight / v.membersInGroup : undefined;
+
+  const staffTotalRevenue = (r: (typeof filteredResults)[number]): number =>
+    r.videos.reduce((s, v) => s + (videoRevenueEarned(v) ?? 0), 0);
+
   const totalViews   = filteredResults.reduce((s, r) => s + r.totalViewsEarned, 0);
+  const totalRevenue = filteredResults.reduce((s, r) => s + staffTotalRevenue(r), 0);
   const uniqueVideos = new Set(filteredResults.flatMap((r) => r.videos.map((v) => v.youtubeId))).size;
 
   return (
@@ -72,7 +82,7 @@ export default function ResultsTable({ results, weights, detectedOptional, onBac
       </div>
 
       {/* Summary cards */}
-      <div className="grid grid-cols-3 gap-4 mb-6">
+      <div className={`grid gap-4 mb-6 ${hasRevenue ? "grid-cols-4" : "grid-cols-3"}`}>
         {[
           { label: "Tổng views phân bổ", value: totalViews.toLocaleString("vi-VN") },
           { label: "Nhân sự", value: String(filteredResults.length) },
@@ -83,6 +93,12 @@ export default function ResultsTable({ results, weights, detectedOptional, onBac
             <p className="text-2xl font-bold text-ink">{value}</p>
           </div>
         ))}
+        {hasRevenue && (
+          <div className="card p-5">
+            <p className="text-sm text-ink-tertiary mb-1">Tổng doanh thu</p>
+            <p className="text-2xl font-bold text-emerald-600">${totalRevenue.toFixed(2)}</p>
+          </div>
+        )}
       </div>
 
       {/* ── Contributor count filter ──────────────────────────────────────── */}
@@ -161,6 +177,12 @@ export default function ResultsTable({ results, weights, detectedOptional, onBac
                     <p className="text-sm text-ink-muted mt-0.5">{r.videos.length} videos</p>
                   )}
                 </div>
+                {hasRevenue && (
+                  <div className="text-right mr-4">
+                    <p className="text-lg font-bold text-emerald-600">${staffTotalRevenue(r).toFixed(2)}</p>
+                    <p className="text-xs text-ink-muted">doanh thu</p>
+                  </div>
+                )}
                 <div className="text-right mr-3">
                   <p className="text-2xl font-bold text-accent">{r.totalViewsEarned.toLocaleString("vi-VN")}</p>
                   <p className="text-xs text-ink-muted">views nhận được</p>
@@ -175,16 +197,19 @@ export default function ResultsTable({ results, weights, detectedOptional, onBac
                     <table className="w-full text-sm">
                       <thead>
                         <tr className="bg-surface-2">
-                          {["Tiêu đề video", "Video ID", "Tổng views", "Người làm", "Công thức", "Views nhận"].map((h, i) => (
-                            <th key={h} className={`text-xs font-bold text-ink-tertiary uppercase tracking-wide px-4 py-3 ${i === 0 ? "pl-6" : ""} ${i === 5 ? "text-right pr-6" : "text-left"} whitespace-nowrap`}>{h}</th>
+                          {[
+                            "Tiêu đề video", "Video ID", "Tổng views", "Người làm", "Công thức", "Views nhận",
+                            ...(hasRevenue ? ["Doanh thu"] : []),
+                          ].map((h, i, arr) => (
+                            <th key={h} className={`text-xs font-bold text-ink-tertiary uppercase tracking-wide px-4 py-3 ${i === 0 ? "pl-6" : ""} ${i === arr.length - 1 ? "text-right pr-6" : "text-left"} whitespace-nowrap`}>{h}</th>
                           ))}
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-border">
                         {r.videos.map((v) => (
                           <tr key={v.youtubeId} className="hover:bg-surface-2/40 transition-colors">
-                            <td className="pl-6 pr-4 py-4 max-w-xs">
-                              <p className="font-medium text-ink truncate" title={v.title}>{v.title}</p>
+                            <td className="pl-6 pr-4 py-4">
+                              <p className="font-medium text-ink">{v.title}</p>
                             </td>
                             <td className="px-4 py-4">
                               <a href={`https://youtube.com/watch?v=${v.youtubeId}`}
@@ -232,18 +257,31 @@ export default function ResultsTable({ results, weights, detectedOptional, onBac
                                 {formatFormula(v, group.label)}
                               </span>
                             </td>
-                            <td className="px-4 pr-6 py-4 text-right">
+                            <td className={`px-4 py-4 text-right ${!hasRevenue ? "pr-6" : ""}`}>
                               <span className="text-lg font-bold text-accent">{v.viewsEarned.toLocaleString("vi-VN")}</span>
                             </td>
+                            {hasRevenue && (
+                              <td className="px-4 pr-6 py-4 text-right">
+                                {videoRevenueEarned(v) !== undefined
+                                  ? <span className="text-sm font-semibold text-emerald-600">${videoRevenueEarned(v)!.toFixed(2)}</span>
+                                  : <span className="text-xs text-ink-muted">—</span>
+                                }
+                              </td>
+                            )}
                           </tr>
                         ))}
                       </tbody>
                       <tfoot>
                         <tr className="bg-surface-2 border-t-2 border-border-strong">
                           <td colSpan={5} className="pl-6 px-4 py-3 text-sm font-semibold text-ink-secondary">Tổng cộng</td>
-                          <td className="px-4 pr-6 py-3 text-right text-xl font-bold text-accent">
+                          <td className={`px-4 py-3 text-right text-xl font-bold text-accent ${!hasRevenue ? "pr-6" : ""}`}>
                             {r.totalViewsEarned.toLocaleString("vi-VN")}
                           </td>
+                          {hasRevenue && (
+                            <td className="px-4 pr-6 py-3 text-right text-base font-bold text-emerald-600">
+                              ${staffTotalRevenue(r).toFixed(2)}
+                            </td>
+                          )}
                         </tr>
                       </tfoot>
                     </table>

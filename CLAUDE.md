@@ -1,9 +1,9 @@
 # YouTube Views Contribution Tracker — Technical Design Document
 
-**Version:** 4.0  
-**Deployment target:** Netlify (static site, fully client-side)  
-**Status:** Ready for development  
-**Scope:** Module 1 — Upload · Column Validation · Staff Assignment · Weight Config · Attribution · Excel Export
+**Version:** 5.0
+**Deployment target:** Netlify (static site, fully client-side)
+**Status:** Production
+**Scope:** Module 1 — Upload · Column Validation · Staff Assignment · Weight Config · Attribution · Excel Export | Module 2 — Staff Analytics
 
 ---
 
@@ -40,24 +40,30 @@ Upload XLSX  →  Detect columns by name  →  Parse from row 3  →  React stat
 /
 ├── src/
 │   ├── main.tsx
-│   ├── App.tsx                       # 4-step state machine
+│   ├── App.tsx                       # 2-tab (salary | match) + SalarySubTab (calc | analytics)
 │   │
 │   ├── components/
 │   │   ├── ui/                       # Button, Input, Badge, Table, Checkbox, Modal
 │   │   └── features/
 │   │       ├── UploadZone.tsx        # Step 1: upload + column validation UI
 │   │       ├── ColumnReport.tsx      # Shows detected vs missing columns
-│   │       ├── WeightConfig.tsx      # Step 2: editor% / content% inputs
-│   │       ├── StaffPanel.tsx        # Step 3: staff list
+│   │       ├── StaffPanel.tsx        # Step 2: staff list + "Sửa file Excel" button
 │   │       ├── StaffCard.tsx         # Individual staff card
-│   │       ├── ResultsTable.tsx      # Step 4: attribution table
-│   │       └── ExportModal.tsx       # Column selector before export
+│   │       ├── ResultsTable.tsx      # Step 3: attribution table (hides revenue when no data)
+│   │       ├── ExportModal.tsx       # Column selector before export
+│   │       └── analytics/
+│   │           ├── AnalyticsDashboard.tsx  # Period filter (3m/6m/12m/all) + 4 sub-tabs
+│   │           ├── OverviewTab.tsx         # KPI cards + role accordions + tỷ lệ/tổng badges
+│   │           ├── RoleCompareTab.tsx      # Per-role comparison table + tỷ lệ/tổng badges
+│   │           ├── RankingTab.tsx          # Top 10 videos + 5 staff leaderboards
+│   │           └── TrendTab.tsx            # SVG line charts (revenue hidden if no data) + trend cards
 │   │
 │   ├── lib/
 │   │   ├── parsers/
 │   │   │   └── youtube-export.ts     # Column detection + parsing
 │   │   ├── services/
-│   │   │   └── attribution.ts        # computeAttribution() + formatFormula()
+│   │   │   ├── attribution.ts        # computeAttribution() + formatFormula()
+│   │   │   └── analytics.ts          # computeAllPeriodMetrics() + computeTrends() + computeRankings()
 │   │   ├── exporters/
 │   │   │   └── excel-export.ts       # buildExport() — mandatory + optional cols
 │   │   ├── validators/
@@ -649,21 +655,17 @@ export function exportToExcel(
 ```typescript
 // src/App.tsx
 
-interface AppState {
-  step:             1 | 2 | 3 | 4;
-  videos:           VideoRow[];
-  detectedOptional: ExportOptionalColumn[];
-  config:           GroupConfig;
-  staffList:        StaffMember[];
-}
+type Tab = "salary" | "match";
+type SalarySubTab = "calc" | "analytics";
 
-const INITIAL_STATE: AppState = {
-  step:             1,
-  videos:           [],
-  detectedOptional: [],
-  config:           DEFAULT_CONFIG,
-  staffList:        [],
-};
+// Tab = "salary" always visible, "match" for SheetMatcher
+// SalarySubTab = "calc" for the 3-step attribution flow,
+//                "analytics" for AnalyticsDashboard (gated: needs ≥ 2 publishedMonth values in videos)
+//
+// Step indicators in top nav bar and weight badges in header are
+// shown only when tab === "salary" && salarySubTab === "calc".
+//
+// "Sửa file Excel" button in StaffPanel header calls onBack() → step 1.
 ```
 
 ```typescript
@@ -904,34 +906,24 @@ export function parsePublishedMonth(raw: string): string {
 
 ---
 
-## 2. Multi-Period History Storage
+## 2. Multi-Period Single-File Approach
 
-Analytics requires data from multiple months. The app stores a rolling history of
-completed sessions in `localStorage` alongside the active session.
+Analytics does **not** require saving separate monthly sessions. The user uploads a
+**single YouTube Analytics export that spans multiple months** (the file has a
+`Thời gian xuất bản video` column whose values fall across different YYYY-MM periods).
+The app derives periods from `publishedMonth` on each `VideoRow`.
 
-### AppState extension
+**Access gate:** The Analytics sub-tab is enabled only when
+`getDistinctPeriods(videos).length >= 2`. Below 2 months a notice is shown.
 
-```typescript
-// src/types/index.ts
+**Period range filter:** 3m / 6m / 12m / Tất cả — slices the `allPeriods` array
+(newest-first) before computing metrics.
 
-export interface MonthSession {
-  period:    string;          // "2026-02" — derived from the majority publishedMonth in videos[]
-  label:     string;          // "Tháng 2/2026" — human-readable
-  videos:    VideoRow[];
-  staffList: StaffMember[];
-  weights:   Record<string, number>;
-  savedAt:   number;          // Date.now() — for display and ordering
-}
+### No history storage required
 
-export interface AppState {
-  step:             1 | 2 | 3;
-  videos:           VideoRow[];
-  detectedOptional: OptionalColumnKey[];
-  staffList:        StaffMember[];
-  weights:          Record<string, number>;
-  history:          MonthSession[];   // NEW — up to 12 most recent months, sorted newest-first
-}
-```
+The old design proposed storing monthly sessions in `localStorage` with a
+"Lưu tháng này" button. **This was not implemented.** All analytics are derived
+from the currently uploaded file in real time.
 
 ### Deriving the period from videos
 
@@ -1040,99 +1032,19 @@ export function channelAvgViews(sessions: MonthSession[]): number {
 
 /**
  * Compute full metrics for every (staff, period) combination.
+ * Groups videos by publishedMonth, then for each period × staff combination
+ * computes weighted views, watch time, revenue, subscribers, viral/under counts.
+ *
+ * Revenue is proportional: v.revenue * weight / membersInRole (same ratio as views).
+ * totalSubscribers is a raw sum (not weighted).
+ *
  * Returns a flat array sorted by period descending, then by weightedViews descending.
  */
 export function computeAllPeriodMetrics(
-  history:        MonthSession[],
-  channelAvg:     number,
-  groupWeights:   Record<string, number>   // { "EDITOR": 60, "CONTENT": 40 }
-): StaffPeriodMetrics[] {
-  const result: StaffPeriodMetrics[] = [];
-
-  for (const session of history) {
-    const videoIndex = new Map(session.videos.map(v => [v.youtubeId, v]));
-    const groupCount = new Map<string, Record<string, number>>();
-
-    // Count per-role contributors per video (same logic as Module 1)
-    for (const staff of session.staffList) {
-      for (const vid of staff.videoIds) {
-        if (!videoIndex.has(vid)) continue;
-        const counts = groupCount.get(vid) ?? {};
-        counts[staff.role] = (counts[staff.role] ?? 0) + 1;
-        groupCount.set(vid, counts);
-      }
-    }
-
-    for (const staff of session.staffList) {
-      const weight = (groupWeights[staff.role] ?? 0) / 100;
-      const matchedVideos = staff.videoIds
-        .map(id => videoIndex.get(id))
-        .filter((v): v is VideoRow => v !== undefined);
-
-      if (!matchedVideos.length) continue;
-
-      let weightedViews  = 0;
-      let totalWatchTime = 0;
-      let watchRatioSum  = 0;
-      let watchRatioN    = 0;
-      let ctrSum         = 0;
-      let ctrN           = 0;
-      let revenue        = 0;
-      let viralCount     = 0;
-      let underCount     = 0;
-
-      for (const v of matchedVideos) {
-        const members = groupCount.get(v.youtubeId)?.[staff.role] ?? 1;
-        const pool    = Math.round(v.views * weight);
-        const earned  = Math.round(pool / members);
-
-        weightedViews += earned;
-
-        if (v.watchTime !== undefined) {
-          totalWatchTime += v.watchTime;
-          if (v.duration && v.views) {
-            // ratio = hours watched / (views × duration_hours)
-            const durationHours = v.duration / 3600;
-            const ratio = durationHours > 0
-              ? v.watchTime / (v.views * durationHours)
-              : 0;
-            watchRatioSum += Math.min(ratio, 1); // cap at 1.0
-            watchRatioN++;
-          }
-        }
-
-        if (v.ctr !== undefined) { ctrSum += v.ctr; ctrN++; }
-        if (v.revenue !== undefined) revenue += v.revenue;
-
-        if (channelAvg > 0) {
-          if (v.views >= channelAvg * 2) viralCount++;
-          else if (v.views < channelAvg * 0.5) underCount++;
-        }
-      }
-
-      result.push({
-        staffName:         staff.name,
-        role:              staff.role,
-        period:            session.period,
-        label:             periodLabel(session.period),
-        videoCount:        matchedVideos.length,
-        weightedViews,
-        avgViewsPerVideo:  matchedVideos.length ? Math.round(weightedViews / matchedVideos.length) : 0,
-        totalWatchTime:    Math.round(totalWatchTime * 10) / 10,
-        avgWatchTimeRatio: watchRatioN ? Math.round((watchRatioSum / watchRatioN) * 100) / 100 : 0,
-        avgCtr:            ctrN ? Math.round((ctrSum / ctrN) * 100) / 100 : 0,
-        totalRevenue:      Math.round(revenue * 100) / 100,
-        revenuePerVideo:   matchedVideos.length ? Math.round((revenue / matchedVideos.length) * 100) / 100 : 0,
-        viralCount,
-        underCount,
-      });
-    }
-  }
-
-  return result.sort((a, b) =>
-    b.period.localeCompare(a.period) || b.weightedViews - a.weightedViews
-  );
-}
+  videos:    VideoRow[],
+  staffList: StaffMember[],
+  weights:   Record<string, number>   // { "Editor": 60, "Content": 40 }
+): StaffPeriodMetrics[] { /* see src/lib/services/analytics.ts */ }
 
 // ── Trend scoring ──────────────────────────────────────────────────────────────
 
@@ -1249,132 +1161,135 @@ export function computeRankings(
 
 ## 4. UI Structure
 
-Analytics appears as a new top-level tab **`📈 Phân tích`** in the main navigation,
-alongside `📊 Tính lương`. The tab is disabled and shows a tooltip when `history.length < 2`.
+Analytics is a **sub-tab under `📊 Tính views`**, not a top-level tab.
+The sub-tab button is disabled (cursor-not-allowed + tooltip) when the uploaded
+file has fewer than 2 distinct `publishedMonth` values.
+
+### Navigation hierarchy
+
+```
+Top nav:  📊 Tính views  |  🔗 Match Sheet
+                │
+                └── Sub-tabs (inside Tính views content):
+                      📊 Tính views   (calc: steps 1/2/3)
+                      📈 Analytics    (gated: ≥ 2 months)
+```
 
 ### Component tree
 
 ```
 src/components/features/analytics/
-├── AnalyticsDashboard.tsx    # Root — period selector + sub-tab routing
-├── OverviewTab.tsx           # Staff cards with mini sparklines + key metrics
-├── TrendTab.tsx              # Trend scores table + multi-period bar chart
-├── QualityTab.tsx            # Watch time ratio + CTR + video distribution
-└── RankingTab.tsx            # Per-role ranking with percentile bars
+├── AnalyticsDashboard.tsx    # Root — period range filter + 4 sub-tabs
+├── OverviewTab.tsx           # KPI summary + role accordions (tỷ lệ/tổng badges)
+├── RoleCompareTab.tsx        # Per-role comparison table (tỷ lệ/tổng badges)
+├── RankingTab.tsx            # Top 10 videos + 5 staff leaderboards
+└── TrendTab.tsx              # SVG line charts (revenue hidden if no data) + trend cards
 ```
 
 ### AnalyticsDashboard.tsx — structure
 
 ```typescript
 interface Props {
-  history: MonthSession[];
-  weights: Record<string, number>;
+  videos:    VideoRow[];
+  staffList: StaffMember[];
+  weights:   Record<string, number>;
 }
+
+type SubTab      = "overview" | "role" | "ranking" | "trend";
+type PeriodRange = "3m" | "6m" | "12m" | "all";
 
 // Internal state
 const [subTab,      setSubTab]      = useState<SubTab>("overview");
-const [periodRange, setPeriodRange] = useState<"3m" | "6m" | "12m" | "all">("6m");
+const [periodRange, setPeriodRange] = useState<PeriodRange>("6m");
+
+// All distinct periods newest-first from uploaded file
+const allPeriods = useMemo(() => getDistinctPeriods(videos), [videos]);
+
+// Apply period range filter → slice allPeriods → filter videos to those periods
+const activePeriods  = useMemo(() => { /* slice allPeriods by n */ }, [allPeriods, periodRange]);
+const filteredVideos = useMemo(() => videos.filter(v => activePeriods.has(v.publishedMonth)), [...]);
 
 // Derived (memoised)
-const channelAvg  = useMemo(() => channelAvgViews(history), [history]);
-const allMetrics  = useMemo(() => computeAllPeriodMetrics(history, channelAvg, weights), [...]);
-const trends      = useMemo(() => computeTrends(allMetrics), [allMetrics]);
-const latestPeriod = history[0]?.period ?? "";
-const rankings    = useMemo(() => computeRankings(allMetrics, latestPeriod), [...]);
+const allMetrics = useMemo(() => computeAllPeriodMetrics(filteredVideos, staffList, weights), [...]);
+const trends     = useMemo(() => computeTrends(allMetrics), [allMetrics]);
 ```
 
-### Period range filter
-
-The user selects how many months to show: 3m / 6m / 12m / Tất cả.
-This filter is applied at the component level by slicing `history[]` before
-passing to services — the services themselves are period-agnostic.
+### Gate condition
 
 ```typescript
-const filteredHistory = useMemo(() => {
-  if (periodRange === "all") return history;
-  const n = periodRange === "3m" ? 3 : periodRange === "6m" ? 6 : 12;
-  return history.slice(0, n);           // history is sorted newest-first
-}, [history, periodRange]);
+if (allPeriods.length < 2) {
+  return <div>Cần dữ liệu từ ít nhất 2 tháng...</div>;
+}
 ```
 
 ---
 
 ## 5. Sub-tab Designs
 
-### 5.1 Overview tab
+### Metric badge system (used across all tabs)
 
-One card per staff member. Each card shows:
+Two badge types indicate how a metric is calculated:
 
-```
-┌──────────────────────────────────────────────────────────────┐
-│  [Avatar]  Nguyen Van A                   Editor · 60%       │
-│            ↑↑ Tăng mạnh  (Trend score: 1.38)                │
-│                                                               │
-│  Views tháng này: 82.400    vs tháng trước: +32%  ↑          │
-│                                                               │
-│  [sparkline — 6 bars, one per period]                        │
-│                                                               │
-│  CTR: 6.5%  │  Watch ratio: 0.68  │  Revenue: $12.40         │
-│  Viral: 3   │  Underperform: 2                               │
-└──────────────────────────────────────────────────────────────┘
-```
-
-**Trend status visual mapping:**
-
-| TrendLabel | Badge color | Text |
+| Badge | Style | Applied to |
 |---|---|---|
-| `rising_strong` | green | ↑↑ Tăng mạnh |
-| `rising` | green | ↑ Tăng |
-| `stable` | gray | → Ổn định |
-| `declining` | amber | ↓ Giảm nhẹ |
-| `declining_severe` | red | ↓↓ Giảm đáng lo |
-| `insufficient_data` | gray | — Chưa đủ dữ liệu |
+| `tỷ lệ` | blue pill | Views, Doanh thu (weighted by role % ÷ members in role) |
+| `tổng` | slate pill | Video count, Watch time, Lượt đăng ký (raw sum) |
 
-### 5.2 Trend tab
+Revenue formula: `v.revenue × (roleWeight / 100) / membersInRole`
+Views formula: `v.views × (roleWeight / 100) / membersInRole`
 
-Two sections:
+### 5.1 Tổng quan tab (`OverviewTab`)
 
-**A — Bar chart (multi-period, grouped by staff)**
-- X-axis: periods (oldest → newest)
-- Y-axis: weighted views
-- Each staff = one color bar per period
-- Filter by role group to avoid too many bars
+**KPI summary cards** (top row):
+- Nhân sự (no badge)
+- Video theo dõi `tổng`
+- Tổng views `tỷ lệ`
+- Tổng doanh thu `tỷ lệ` — **hidden entirely when no revenue column in file**
 
-**B — Trend score table**
+**Role accordions** (collapsible, first open by default):
+- Header: role name + member count + total views + total revenue
+- Staff table inside: `#` | Tên | Video `tổng` | Tổng views `tỷ lệ` | Watch time `tổng` | Doanh thu `tỷ lệ` | Xu hướng
+- Footer row with role totals
 
-| Tên | Vai trò | Trend score | Trạng thái | Best month | Worst month |
-|---|---|---|---|---|---|
-| Nguyen Van A | Editor | 1.38 | ↑↑ Tăng mạnh | Tháng 11 | Tháng 8 |
+### 5.2 Theo vai trò tab (`RoleCompareTab`)
 
-Table sorted by trend score descending. Clicking a row expands a per-period detail line.
+One card per role group. Staff ranked by total views (descending).
+Table columns: Tên | Video `tổng` | Watch time TB `tổng` | Tổng watch time `tổng` | Tổng views `tỷ lệ` | Tổng doanh thu `tỷ lệ` | Xu hướng
 
-### 5.3 Quality tab
+Rank badges: #1 gold · #2 silver · #3 bronze.
 
-**Watch time ratio** and **CTR** — side-by-side ranked lists within each role group.
-Below that: Video distribution breakdown (viral / normal / underperform counts) per staff.
+### 5.3 Xếp hạng tab (`RankingTab`)
 
-Formula display for Watch time ratio:
-```
-Watch time ratio = Tổng giờ xem ÷ (Số views × Thời lượng video trung bình)
-```
+**Top Video sections** (collapsible):
+- 🎬 Top 10 Video — Lượt xem (open by default)
+- 🎬 Top 10 Video — Doanh thu (hidden if no revenue)
+- 🎬 Top 10 Video — Lượt đăng ký (hidden if no subscriber data)
 
-**Interpretation guide (shown as a callout):**
+Each video shows: rank · title (links to YouTube) · staff tags · value · proportional bar
 
-| Range | Meaning |
-|---|---|
-| ≥ 0.7 | Người xem xem gần hết — nội dung rất tốt |
-| 0.5–0.7 | Bình thường |
-| < 0.5 | Người xem bỏ sớm — xem lại nội dung / tiêu đề |
+**Staff leaderboard sections** (collapsible, with badge labels):
+- 👁️ Số views `tỷ lệ` — open by default
+- 🎬 Video đóng góp `tổng`
+- 💰 Doanh thu `tỷ lệ` — hidden if no data
+- 🔔 Lượt đăng ký `tổng` — hidden if no data
+- ⏱️ Thời lượng xem `tổng` — hidden if no data
 
-### 5.4 Ranking tab
+Medals 🥇🥈🥉 for top 3, numbered circle for the rest.
 
-Two side-by-side columns: one per role group (Editor / Content / any additional groups).
-Within each column, staff ranked 1st–Nth with:
-- Rank number (gold for #1)
-- Name + avatar
-- Weighted views
-- Horizontal bar (longest = 100%, others proportional)
-- Percentile badge
+### 5.4 Xu hướng tab (`TrendTab`)
+
+**SVG line charts** (no external library):
+- Each staff = one colored polyline with a distinct `strokeDasharray` pattern
+  (prevents lines from vanishing when two staff have identical values)
+- Dots have a transparent r=12 hit target for stable hover; visible r=4.5 dot
+  has `pointerEvents: none` to prevent flicker
+- Tooltip: HTML `<div>` overlay positioned from SVG cx/cy, not an SVG element
+
+Charts shown:
+- Doanh thu theo thời gian — **hidden entirely when no revenue column in file**
+- Views theo thời gian — always shown
+
+**Trend summary cards**: one per staff — name · role · period count · trend badge · latest views
 
 ---
 
@@ -1414,55 +1329,23 @@ Sheet structure:
 
 ---
 
-## 7. State Extension
+## 7. State (No History Required)
+
+Analytics derives all data from the currently uploaded `VideoRow[]` (which already
+contains `publishedMonth` per row). No `history[]` array, no "save month" button,
+no `MonthSession` type. The existing `AppState` is unchanged from Module 1:
 
 ```typescript
-// src/types/index.ts  (additions only)
-
 export interface AppState {
-  // ... existing fields unchanged ...
-
-  // NEW — persisted rolling history
-  history: MonthSession[];    // sorted newest-first, max 12 entries
-}
-
-export const INITIAL_STATE: AppState = {
-  // ... existing ...
-  history: [],
-};
-```
-
-```typescript
-// src/lib/storage/session-storage.ts  (additions)
-
-const KEY_HISTORY = "yt_tracker_history_v1";
-
-export function saveHistory(history: MonthSession[]): void {
-  try {
-    localStorage.setItem(KEY_HISTORY, JSON.stringify(history));
-  } catch { /**/ }
-}
-
-export function loadHistory(): MonthSession[] {
-  try {
-    const raw = localStorage.getItem(KEY_HISTORY);
-    return raw ? JSON.parse(raw) : [];
-  } catch { return []; }
-}
-
-export function addOrReplaceSession(
-  history:    MonthSession[],
-  newSession: MonthSession,
-  maxSessions = 12
-): MonthSession[] {
-  // Remove existing entry for same period if any
-  const filtered = history.filter(s => s.period !== newSession.period);
-  // Prepend new, enforce max limit, keep sorted newest-first
-  return [newSession, ...filtered]
-    .sort((a, b) => b.period.localeCompare(a.period))
-    .slice(0, maxSessions);
+  step:             1 | 2 | 3;
+  videos:           VideoRow[];           // contains publishedMonth — multi-period source
+  detectedOptional: OptionalColumnKey[];
+  staffList:        StaffMember[];
+  weights:          Record<string, number>;
 }
 ```
+
+The `localStorage` key remains `"yt_tracker_v4"` — no additional history keys.
 
 ---
 
@@ -1517,34 +1400,36 @@ describe("addOrReplaceSession", () => {
 ## 9. Development Checklist — Module 2
 
 ```
-Phase A — Data layer
- [ ] Add publishedAt + ctr + impressions to OPTIONAL_COLUMNS registry
- [ ] Add parsePublishedMonth() + derivePeriod() with unit tests
- [ ] Update VideoRow type with publishedAt, publishedMonth, ctr, impressions
- [ ] Extend AppState with history: MonthSession[]
- [ ] Add saveHistory / loadHistory / addOrReplaceSession to session-storage.ts
+Phase A — Data layer                                          STATUS
+ [x] Add publishedAt + ctr to OPTIONAL_COLUMNS registry       DONE
+ [x] parsePublishedMonth() + derivePeriod()                   DONE
+ [x] VideoRow updated with publishedAt, publishedMonth, ctr   DONE
+ [x] computeAllPeriodMetrics(videos, staffList, weights)       DONE
+     — revenue weighted: v.revenue * weight / members
+     — totalSubscribers raw sum
+ [x] computeTrends() — all 6 TrendLabel cases                 DONE
+ [x] computeRankings()                                        DONE
+ [x] getDistinctPeriods()                                     DONE
 
-Phase B — Analytics services (pure functions, no UI)
- [ ] computeAllPeriodMetrics() with unit tests
- [ ] computeTrends() with unit tests — all 6 TrendLabel cases covered
- [ ] computeRankings() with unit tests
- [ ] channelAvgViews()
+Phase B — Analytics sub-tab (inside Tính views)               STATUS
+ [x] AnalyticsDashboard — period range filter + sub-tab route  DONE
+ [x] OverviewTab — KPI cards + role accordions + badges        DONE
+ [x] RoleCompareTab — per-role ranked table + badges           DONE
+ [x] RankingTab — Top 10 videos + 5 leaderboards              DONE
+ [x] TrendTab — SVG line charts + tooltip fix + dash patterns  DONE
+ [x] Analytics moved to sub-tab under Tính views              DONE
+ [x] Revenue-dependent UI hidden when no revenue column       DONE
+ [x] tỷ lệ/tổng badges on all metric column headers           DONE
 
-Phase C — "Save month" UI in Results screen
- [ ] "Lưu tháng này" button in ResultsTable.tsx
- [ ] Overwrite confirmation modal (if period already exists in history)
- [ ] History sidebar: list saved months, allow delete
+Phase C — UX improvements                                      STATUS
+ [x] "Sửa file Excel" button in StaffPanel                    DONE
+ [x] ResultsTable: full-width title column (no truncation)     DONE
+ [x] ResultsTable: Tổng doanh thu card hidden when no revenue  DONE
+ [x] Step indicators + weight badges hidden on Analytics tab   DONE
 
-Phase D — Analytics tab + sub-tabs
- [ ] AnalyticsDashboard.tsx — period range filter + sub-tab routing
- [ ] OverviewTab.tsx — staff cards with sparklines, trend badge, metrics
- [ ] TrendTab.tsx — bar chart + trend score table
- [ ] QualityTab.tsx — CTR + watch ratio ranked lists + video distribution
- [ ] RankingTab.tsx — role-separated ranking with percentile bars
-
-Phase E — Analytics export
- [ ] exportAnalyticsReport() — 4-sheet Excel export
- [ ] Export button in AnalyticsDashboard
+Phase D — Analytics export                                     STATUS
+ [ ] exportAnalyticsReport() — Excel export from Analytics tab TODO
+```
 ```
 
 ---
@@ -1896,4 +1781,509 @@ Phase C — Export
  [ ] Add Sheet 5 (revenue summary) to exportAnalyticsReport()
  [ ] Add Sheet 6 (video-level revenue) to exportAnalyticsReport()
  [ ] Omit both sheets gracefully when all revenue = 0
+```
+---
+
+# Module 4 — Staff Video ID Filter
+
+**Version:** 1.0  
+**Status:** Ready for development  
+**Scope:** Upload staff assignment sheet → parse staff–video mappings → filter by person → copy or export
+
+---
+
+## Overview
+
+This module answers a specific operational need:
+
+> "Given our internal production sheet (which tracks who made what),
+> extract the list of video IDs for each person so they can be pasted
+> into the Views Calculator staff cards."
+
+The user maintains a Google Sheet / Excel file that assigns staff to videos.
+Each row is one video. The staff column contains multiple names (e.g. colorful
+tag chips like "CT Minh Anh", "ED Tuân 95"). This module parses that sheet,
+groups video IDs by staff member, and produces copy-ready ID lists.
+
+---
+
+## 1. Input File Specification
+
+### Observed format (from screenshot)
+```
+Row 1  →  empty or decorative
+Row 2  →  Column headers
+Row 3+ →  Data rows
+```
+
+| Column | Header | Content |
+|---|---|---|
+| B | LINK GỐC | Original source URL |
+| C | Video ID | 11-character YouTube video ID (may be empty) |
+| D | TIÊU ĐỀ | Video title |
+| E | TÊN BÀI | Internal working title |
+| F | LINK | YouTube link |
+| G | TRẠNG THÁI | Status (e.g. "Đã Đăng") |
+| K | Tên Người Làm | Staff names — **multiple per cell**, newline or space separated |
+| T | NGÀY ĐĂNG | Publish date |
+
+### Key characteristics
+
+- **Video ID column (C):** May be empty for some rows — those rows are skipped.
+- **Staff column (K):** Contains multiple names in one cell. Names are separated by
+  newlines (`\n`), and each name may have a role prefix like `CT `, `ED `.
+  Example cell value: `"CT Minh Anh\nED Tuân 95"` or `"CT Tuyên\nED Hoàng"`.
+- **Header row:** Row 2 (index 1 in 0-based arrays). Data starts row 3 (index 2).
+
+### Column detection strategy
+
+Columns are detected **by header name** (case-insensitive, trimmed), not by fixed
+index. This makes the parser robust to column reordering.
+```typescript
+// src/lib/parsers/staff-sheet.ts
+
+export const STAFF_SHEET_COLUMNS = {
+  videoId:   ["video id", "video_id", "id"],
+  staffName: ["tên người làm", "ten nguoi lam", "người làm", "staff"],
+  title:     ["tiêu đề", "tieu de", "title", "tên bài", "ten bai"],
+  status:    ["trạng thái", "trang thai", "status"],
+  publishedAt: ["ngày đăng", "ngay dang", "published", "publish date"],
+} as const;
+```
+
+---
+
+## 2. Parser
+```typescript
+// src/lib/parsers/staff-sheet.ts
+
+import * as XLSX from "xlsx";
+
+const VIDEO_ID_REGEX = /^[a-zA-Z0-9_-]{11}$/;
+
+export interface StaffSheetRow {
+  videoId:      string;
+  title:        string;
+  staffNames:   string[];
+  status:       string;
+  publishedAt:  string;
+  rowIndex:     number;
+}
+
+export interface StaffSheetParseSuccess {
+  success:    true;
+  rows:       StaffSheetRow[];
+  skipped:    number;
+  allStaff:   string[];
+  headerRow:  number;
+}
+
+export interface StaffSheetParseFailure {
+  success: false;
+  error:   string;
+}
+
+export type StaffSheetParseResult = StaffSheetParseSuccess | StaffSheetParseFailure;
+
+export function parseStaffCell(raw: unknown): string[] {
+  if (raw === null || raw === undefined) return [];
+  const str = String(raw).trim();
+  if (!str) return [];
+  return str
+    .split(/[\n,;]+/)
+    .map(s => s.trim())
+    .filter(s => s.length > 0);
+}
+
+function detectHeaderRow(raw: unknown[][]): number {
+  for (let i = 0; i <= Math.min(4, raw.length - 1); i++) {
+    const row = (raw[i] as unknown[]).map(c => String(c ?? "").toLowerCase().trim());
+    const hasVideoId   = STAFF_SHEET_COLUMNS.videoId.some(a   => row.includes(a));
+    const hasStaffName = STAFF_SHEET_COLUMNS.staffName.some(a => row.includes(a));
+    if (hasVideoId && hasStaffName) return i;
+  }
+  return -1;
+}
+
+function findColIndex(headerRow: string[], aliases: readonly string[]): number {
+  for (const alias of aliases) {
+    const idx = headerRow.indexOf(alias);
+    if (idx !== -1) return idx;
+  }
+  return -1;
+}
+
+export function parseStaffSheet(buffer: ArrayBuffer): StaffSheetParseResult {
+  try {
+    const wb  = XLSX.read(buffer, { type: "array" });
+    const ws  = wb.Sheets[wb.SheetNames[0]];
+    const raw = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1 });
+
+    if (raw.length < 2) {
+      return { success: false, error: "File has fewer than 2 rows." };
+    }
+
+    const headerRowIdx = detectHeaderRow(raw as unknown[][]);
+    if (headerRowIdx === -1) {
+      return {
+        success: false,
+        error: "Could not detect header row. Expected columns: 'Video ID' and 'Tên Người Làm' (or aliases)."
+      };
+    }
+
+    const headerRow = (raw[headerRowIdx] as unknown[])
+      .map(c => String(c ?? "").toLowerCase().trim());
+
+    const colVideoId   = findColIndex(headerRow, STAFF_SHEET_COLUMNS.videoId);
+    const colStaffName = findColIndex(headerRow, STAFF_SHEET_COLUMNS.staffName);
+    const colTitle     = findColIndex(headerRow, STAFF_SHEET_COLUMNS.title);
+    const colStatus    = findColIndex(headerRow, STAFF_SHEET_COLUMNS.status);
+    const colPublished = findColIndex(headerRow, STAFF_SHEET_COLUMNS.publishedAt);
+
+    if (colVideoId === -1)   return { success: false, error: "Column 'Video ID' not found." };
+    if (colStaffName === -1) return { success: false, error: "Column 'Tên Người Làm' not found." };
+
+    const rows:     StaffSheetRow[] = [];
+    const staffSet  = new Set<string>();
+    let   skipped   = 0;
+
+    for (let i = headerRowIdx + 1; i < raw.length; i++) {
+      const row = raw[i] as unknown[];
+      if (!row?.length) continue;
+
+      const rawId = String(row[colVideoId] ?? "").trim();
+      if (!VIDEO_ID_REGEX.test(rawId)) { skipped++; continue; }
+
+      const names = parseStaffCell(row[colStaffName]);
+      names.forEach(n => staffSet.add(n));
+
+      rows.push({
+        videoId:     rawId,
+        title:       colTitle     !== -1 ? String(row[colTitle]     ?? "").trim() : "",
+        staffNames:  names,
+        status:      colStatus    !== -1 ? String(row[colStatus]    ?? "").trim() : "",
+        publishedAt: colPublished !== -1 ? String(row[colPublished] ?? "").trim() : "",
+        rowIndex:    i + 1,
+      });
+    }
+
+    if (rows.length === 0) {
+      return { success: false, error: "No rows with valid Video IDs found." };
+    }
+
+    return {
+      success:   true,
+      rows,
+      skipped,
+      allStaff:  [...staffSet].sort(),
+      headerRow: headerRowIdx + 1,
+    };
+  } catch (e) {
+    return { success: false, error: `Parse error: ${String(e)}` };
+  }
+}
+```
+
+---
+
+## 3. Grouping Service
+```typescript
+// src/lib/services/staff-video-filter.ts
+
+import type { StaffSheetRow } from "@/lib/parsers/staff-sheet";
+
+export interface StaffVideoGroup {
+  staffName:  string;
+  videoIds:   string[];
+  videoCount: number;
+  videos:     Array<{
+    videoId:     string;
+    title:       string;
+    status:      string;
+    publishedAt: string;
+  }>;
+}
+
+export function groupVideosByStaff(rows: StaffSheetRow[]): StaffVideoGroup[] {
+  const map = new Map<string, StaffVideoGroup>();
+
+  for (const row of rows) {
+    for (const name of row.staffNames) {
+      if (!map.has(name)) {
+        map.set(name, { staffName: name, videoIds: [], videoCount: 0, videos: [] });
+      }
+      const group = map.get(name)!;
+      if (!group.videoIds.includes(row.videoId)) {
+        group.videoIds.push(row.videoId);
+        group.videos.push({
+          videoId: row.videoId, title: row.title,
+          status: row.status, publishedAt: row.publishedAt,
+        });
+      }
+    }
+  }
+
+  // Collect unassigned videos
+  const unassigned: StaffVideoGroup = {
+    staffName: "— Chưa phân công", videoIds: [], videoCount: 0, videos: [],
+  };
+  for (const row of rows) {
+    if (row.staffNames.length === 0) {
+      unassigned.videoIds.push(row.videoId);
+      unassigned.videos.push({
+        videoId: row.videoId, title: row.title,
+        status: row.status, publishedAt: row.publishedAt,
+      });
+    }
+  }
+
+  const result = [...map.values()]
+    .map(g => ({ ...g, videoCount: g.videoIds.length }))
+    .sort((a, b) => a.staffName.localeCompare(b.staffName));
+
+  if (unassigned.videoIds.length > 0) {
+    result.push({ ...unassigned, videoCount: unassigned.videoIds.length });
+  }
+
+  return result;
+}
+
+export function formatVideoIdList(videoIds: string[]): string {
+  return videoIds.join("\n");
+}
+```
+
+---
+
+## 4. Component Structure
+```
+src/components/features/
+└── StaffFilter.tsx     # Main component — the full feature UI
+```
+
+---
+
+## 5. UI Design
+
+### Step 1 — Upload zone (empty state)
+```
+┌────────────────────────────────────────────────────────────────┐
+│              ↑  Upload file Excel                              │
+│  File .xlsx hoặc .csv từ Google Sheet                          │
+│  Cần có cột: Video ID  +  Tên Người Làm                        │
+└────────────────────────────────────────────────────────────────┘
+```
+
+### Step 2 — Loaded state
+```
+Lọc Video ID           [↺ Đổi file]
+4 nhân sự  ·  127 video  ·  12 không có ID
+
+[🔍 Tìm kiếm nhân sự...]   [Chọn tất cả]   [↓ Export Excel]
+
+☑  CT Minh Anh   32 videos   [Copy IDs]  [Xem]  ▼
+☑  CT Tuyên      28 videos   [Copy IDs]  [Xem]  ▼
+☑  ED Hoàng      45 videos   [Copy IDs]  [Xem]  ▼
+☑  ED Tuân 95    22 videos   [Copy IDs]  [Xem]  ▼
+
+[↓ Export Excel — 4 nhân sự đã chọn]
+```
+
+### Expanded row
+```
+☑  CT Minh Anh   32 videos   [Copy IDs]  [Xem]  ▲
+   ┌──────────────────────────────────────────────┐
+   │ GI1b9_k-tN4  TOP 12 DEADLIEST...  Đã Đăng   │
+   │ XI0hV24RLEQ  20 Los Autos...      Đã Đăng   │
+   └──────────────────────────────────────────────┘
+   [Copy tất cả IDs — 32 dòng]
+```
+
+### Copy behaviour
+
+[Copy IDs] copies newline-separated IDs to clipboard.
+Button shows "✓ Đã copy" for 1.5s as feedback.
+
+---
+
+## 6. Component Implementation Skeleton
+```typescript
+// src/components/features/StaffFilter.tsx
+
+import { useRef, useState, useMemo } from "react";
+import { parseStaffSheet } from "@/lib/parsers/staff-sheet";
+import { groupVideosByStaff, formatVideoIdList } from "@/lib/services/staff-video-filter";
+import * as XLSX from "xlsx";
+import type { StaffVideoGroup } from "@/lib/services/staff-video-filter";
+import type { StaffSheetParseSuccess } from "@/lib/parsers/staff-sheet";
+
+export default function StaffFilter() {
+  const [parseResult, setParseResult] = useState<StaffSheetParseSuccess | null>(null);
+  const [groups,      setGroups]      = useState<StaffVideoGroup[]>([]);
+  const [selected,    setSelected]    = useState<Set<string>>(new Set());
+  const [expanded,    setExpanded]    = useState<Set<string>>(new Set());
+  const [searchQuery, setSearchQuery] = useState("");
+  const [copiedName,  setCopiedName]  = useState<string | null>(null);
+  const [parseError,  setParseError]  = useState("");
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = "";
+    setParseError("");
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const result = parseStaffSheet(ev.target!.result as ArrayBuffer);
+      if (!result.success) { setParseError(result.error); return; }
+      const grouped = groupVideosByStaff(result.rows);
+      setParseResult(result);
+      setGroups(grouped);
+      setSelected(new Set(grouped.map(g => g.staffName)));
+      setExpanded(new Set());
+      setSearchQuery("");
+    };
+    reader.readAsArrayBuffer(file);
+  };
+
+  const filteredGroups = useMemo(() => {
+    if (!searchQuery.trim()) return groups;
+    const q = searchQuery.toLowerCase();
+    return groups.filter(g => g.staffName.toLowerCase().includes(q));
+  }, [groups, searchQuery]);
+
+  const toggleSelect  = (name: string) => {
+    const next = new Set(selected);
+    next.has(name) ? next.delete(name) : next.add(name);
+    setSelected(next);
+  };
+
+  const copyIds = async (group: StaffVideoGroup) => {
+    await navigator.clipboard.writeText(formatVideoIdList(group.videoIds));
+    setCopiedName(group.staffName);
+    setTimeout(() => setCopiedName(null), 1500);
+  };
+
+  const toggleExpand = (name: string) => {
+    const next = new Set(expanded);
+    next.has(name) ? next.delete(name) : next.add(name);
+    setExpanded(next);
+  };
+
+  const exportExcel = () => {
+    const sel = groups.filter(g => selected.has(g.staffName));
+    const wb  = XLSX.utils.book_new();
+
+    const ws1 = XLSX.utils.aoa_to_sheet([
+      ["Tên nhân sự", "Số video", "Video IDs (paste vào yt-tracker)"],
+      ...sel.map(g => [g.staffName, g.videoCount, g.videoIds.join("\n")]),
+    ]);
+    ws1["!cols"] = [{ wch: 25 }, { wch: 10 }, { wch: 80 }];
+    XLSX.utils.book_append_sheet(wb, ws1, "Staff → Video IDs");
+
+    const ws2 = XLSX.utils.aoa_to_sheet([
+      ["Tên nhân sự", "Video ID", "Tiêu đề", "Trạng thái", "Ngày đăng"],
+      ...sel.flatMap(g => g.videos.map(v =>
+        [g.staffName, v.videoId, v.title, v.status, v.publishedAt]
+      )),
+    ]);
+    ws2["!cols"] = [{ wch: 25 }, { wch: 14 }, { wch: 60 }, { wch: 12 }, { wch: 14 }];
+    XLSX.utils.book_append_sheet(wb, ws2, "Chi tiết");
+
+    XLSX.writeFile(wb, "staff-video-ids.xlsx");
+  };
+}
+```
+
+---
+
+## 7. Export File Format
+
+**Sheet 1 — "Staff → Video IDs":** One row per staff, IDs newline-separated in one cell (paste-ready).
+
+**Sheet 2 — "Chi tiết":** One row per (staff × video) — filterable in Excel.
+
+---
+
+## 8. Edge Cases
+
+| Case | Behaviour |
+|---|---|
+| Video ID cell empty | Row skipped, counted in `skipped` |
+| Video ID invalid format | Row skipped |
+| Staff cell empty | Video goes to "Chưa phân công" group |
+| Same video ID twice | Deduplicated within each group |
+| No Video ID column | Parse fails with clear error |
+| No Tên Người Làm column | Parse fails with clear error |
+
+---
+
+## 9. Navigation Integration
+```typescript
+type Tab = "salary" | "transcript" | "match" | "filter";  // "filter" is NEW
+// Tab label: 🔍 Lọc Video ID
+```
+
+Tab is always accessible — no dependency on other modules.
+
+---
+
+## 10. Unit Tests
+```typescript
+describe("parseStaffCell", () => {
+  it("splits newline-separated names")
+  it("splits comma-separated names")
+  it("returns [] for empty/null input")
+  it("preserves role prefixes: 'CT Minh Anh' stays 'CT Minh Anh'")
+})
+
+describe("parseStaffSheet", () => {
+  it("finds header in row 2 when row 1 is empty")
+  it("returns failure when Video ID column not found")
+  it("returns failure when Tên Người Làm column not found")
+  it("skips rows with empty or invalid Video IDs")
+  it("collects all unique staff names into allStaff[]")
+})
+
+describe("groupVideosByStaff", () => {
+  it("one video with 2 staff → appears in both groups")
+  it("deduplicates video ID within a group")
+  it("video with no staff → goes to Chưa phân công group")
+  it("groups sorted alphabetically")
+})
+
+describe("formatVideoIdList", () => {
+  it("joins IDs with newlines, no trailing newline")
+  it("returns empty string for empty array")
+})
+```
+
+---
+
+## 11. Development Checklist
+```
+Phase A — Parser
+ [ ] parseStaffCell() — handles \n, comma, semicolon
+ [ ] detectHeaderRow() — scans rows 0–4, alias matching
+ [ ] parseStaffSheet() — all edge cases + unit tests
+
+Phase B — Service
+ [ ] groupVideosByStaff() — multi-staff, dedup, unassigned group
+ [ ] formatVideoIdList()
+
+Phase C — UI
+ [ ] Upload zone
+ [ ] Summary bar (N nhân sự · N video · N không có ID)
+ [ ] Staff rows — checkbox, count, Copy IDs, expand
+ [ ] Expanded video detail table
+ [ ] Search by staff name
+ [ ] Select all / deselect all
+ [ ] Copy with ✓ feedback (1.5s)
+
+Phase D — Export
+ [ ] Sheet 1 summary + Sheet 2 detail
+ [ ] Export only selected staff
+
+Phase E — Integration
+ [ ] Add 🔍 Lọc Video ID tab to App.tsx
 ```

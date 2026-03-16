@@ -1,15 +1,18 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import type { AppState, StaffMember, OptionalColumnKey, VideoRow } from "@/types";
 import { INITIAL_STATE } from "@/types";
 import { GROUPS } from "@/config/groups";
 import { saveSession, loadSession, clearSession } from "@/lib/storage/session-storage";
 import { computeAttribution } from "@/lib/services/attribution";
+import { getDistinctPeriods } from "@/lib/services/analytics";
 
 import UploadZone            from "@/components/features/UploadZone";
 import StaffPanel            from "@/components/features/StaffPanel";
 import ResultsTable          from "@/components/features/ResultsTable";
-import TranscriptDownloader  from "@/components/features/TranscriptDownloader";
+// import TranscriptDownloader  from "@/components/features/TranscriptDownloader";
 import SheetMatcher           from "@/components/features/SheetMatcher";
+import StaffFilter            from "@/components/features/StaffFilter";
+import AnalyticsDashboard     from "@/components/features/analytics/AnalyticsDashboard";
 
 const SALARY_STEPS = [
   { n: 1, label: "Upload file" },
@@ -17,14 +20,16 @@ const SALARY_STEPS = [
   { n: 3, label: "Kết quả" },
 ];
 
-type Tab = "salary" | "transcript" | "match";
+type Tab = "salary" | "match" | "filter";
+type SalarySubTab = "calc" | "analytics";
 
 const DEFAULT_WEIGHTS: Record<string, number> = Object.fromEntries(
   GROUPS.map((g) => [g.key, g.weight])
 );
 
 export default function App() {
-  const [tab,   setTab]   = useState<Tab>("salary");
+  const [tab,         setTab]         = useState<Tab>("salary");
+  const [salarySubTab, setSalarySubTab] = useState<SalarySubTab>("calc");
   const [state, setState] = useState<AppState>(() => {
     const saved = loadSession();
     if (saved) return { ...saved, weights: { ...DEFAULT_WEIGHTS, ...saved.weights } };
@@ -38,10 +43,17 @@ export default function App() {
   }, []);
 
   const handleUpload = (videos: VideoRow[], detectedOptional: OptionalColumnKey[]) => {
+    clearSession();
     setState({ ...INITIAL_STATE, step: 2, videos, detectedOptional, staffList: [], weights: DEFAULT_WEIGHTS });
   };
 
-  const handleNewSession = () => { clearSession(); setState({ ...INITIAL_STATE, weights: DEFAULT_WEIGHTS }); };
+  const handleNewSession = () => {
+    clearSession();
+    setState({ ...INITIAL_STATE, weights: DEFAULT_WEIGHTS });
+  };
+
+  // Distinct periods available in the uploaded videos (for analytics tab gate)
+  const analyticsPeriods = useMemo(() => getDistinctPeriods(state.videos), [state.videos]);
 
   const results = state.step === 3
     ? computeAttribution(state.videos, state.staffList, state.weights)
@@ -63,7 +75,7 @@ export default function App() {
         </div>
 
         <div className="flex items-center gap-4">
-          {tab === "salary" && (
+          {tab === "salary" && salarySubTab === "calc" && (
             <div className="flex items-center gap-2">
               {GROUPS.map((g) => {
                 const w = state.weights[g.key] ?? g.weight;
@@ -81,7 +93,7 @@ export default function App() {
               )}
             </div>
           )}
-          {state.step > 1 && tab === "salary" && (
+          {state.step > 1 && tab === "salary" && salarySubTab === "calc" && (
             <button onClick={handleNewSession} className="btn-ghost btn-sm text-ink-tertiary">
               ↺ Session mới
             </button>
@@ -115,15 +127,25 @@ export default function App() {
           {/* Tab: Match Sheet */}
           <button
             onClick={() => setTab("match")}
-            className={`flex items-center gap-2 py-3.5 px-4 text-sm font-semibold border-b-2 transition-all mr-4 ${
+            className={`flex items-center gap-2 py-3.5 px-4 text-sm font-semibold border-b-2 transition-all mr-1 ${
               tab === "match" ? "border-accent text-accent" : "border-transparent text-ink-tertiary hover:text-ink"
             }`}
           >
             🔗 Match Sheet
           </button>
 
-          {/* Salary step indicators (only when on salary tab) */}
-          {tab === "salary" && (
+          {/* Tab: Staff Filter */}
+          <button
+            onClick={() => setTab("filter")}
+            className={`flex items-center gap-2 py-3.5 px-4 text-sm font-semibold border-b-2 transition-all mr-1 ${
+              tab === "filter" ? "border-accent text-accent" : "border-transparent text-ink-tertiary hover:text-ink"
+            }`}
+          >
+            🔍 Lọc Video ID
+          </button>
+
+          {/* Salary step indicators (only when on salary tab, calc sub-tab) */}
+          {tab === "salary" && salarySubTab === "calc" && (
             <div className="flex items-center gap-1 ml-2 border-l border-border pl-4">
               {SALARY_STEPS.map((s, i) => {
                 const active = s.n === state.step;
@@ -159,25 +181,76 @@ export default function App() {
       {/* Content */}
       <main className="max-w-5xl mx-auto px-6 py-10 animate-in">
         {/* {tab === "transcript" && <TranscriptDownloader />} */}
-        {tab === "match" && <SheetMatcher />}
+        {tab === "match"  && <SheetMatcher />}
+        {tab === "filter" && <StaffFilter />}
 
         {tab === "salary" && (
           <>
-            {state.step === 1 && <UploadZone onSuccess={handleUpload} />}
-            {state.step === 2 && (
-              <StaffPanel
-                staffList={state.staffList} videos={state.videos} weights={state.weights}
-                onChange={(staffList: StaffMember[]) => patch({ staffList })}
-                onWeightsChange={(weights: Record<string, number>) => patch({ weights })}
-                onNext={() => patch({ step: 3 })}
-                onBack={() => patch({ step: 1 })}
-              />
+            {/* Sub-tab bar */}
+            <div className="flex gap-1 mb-8 border-b border-border -mt-4">
+              <button
+                onClick={() => setSalarySubTab("calc")}
+                className={`flex items-center gap-2 py-2.5 px-4 text-sm font-semibold border-b-2 transition-all -mb-px ${
+                  salarySubTab === "calc" ? "border-accent text-accent" : "border-transparent text-ink-tertiary hover:text-ink"
+                }`}
+              >
+                📊 Tính views
+              </button>
+
+              <div className="relative group">
+                <button
+                  onClick={() => analyticsPeriods.length >= 2 && setSalarySubTab("analytics")}
+                  className={`flex items-center gap-2 py-2.5 px-4 text-sm font-semibold border-b-2 transition-all -mb-px ${
+                    salarySubTab === "analytics"
+                      ? "border-accent text-accent"
+                      : analyticsPeriods.length >= 2
+                      ? "border-transparent text-ink-tertiary hover:text-ink"
+                      : "border-transparent text-ink-muted cursor-not-allowed"
+                  }`}
+                >
+                  📈 Analytics
+                  {analyticsPeriods.length > 0 && (
+                    <span className="text-xs bg-surface-2 text-ink-muted px-1.5 py-0.5 rounded-full">
+                      {analyticsPeriods.length}T
+                    </span>
+                  )}
+                </button>
+                {analyticsPeriods.length < 2 && (
+                  <div className="absolute top-full left-1/2 -translate-x-1/2 mt-1 hidden group-hover:block z-20 w-56 bg-ink text-white text-xs rounded-lg px-3 py-2 shadow-lg pointer-events-none">
+                    Cần ≥ 2 tháng. Upload file YouTube Analytics có cột "Thời gian xuất bản video".
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {salarySubTab === "calc" && (
+              <>
+                {state.step === 1 && <UploadZone onSuccess={handleUpload} />}
+                {state.step === 2 && (
+                  <StaffPanel
+                    staffList={state.staffList} videos={state.videos} weights={state.weights}
+                    onChange={(staffList: StaffMember[]) => patch({ staffList })}
+                    onWeightsChange={(weights: Record<string, number>) => patch({ weights })}
+                    onNext={() => patch({ step: 3 })}
+                    onBack={() => patch({ step: 1 })}
+                  />
+                )}
+                {state.step === 3 && (
+                  <ResultsTable
+                    results={results}
+                    weights={state.weights}
+                    detectedOptional={state.detectedOptional}
+                    onBack={() => patch({ step: 2 })}
+                  />
+                )}
+              </>
             )}
-            {state.step === 3 && (
-              <ResultsTable
-                results={results} weights={state.weights}
-                detectedOptional={state.detectedOptional}
-                onBack={() => patch({ step: 2 })}
+
+            {salarySubTab === "analytics" && (
+              <AnalyticsDashboard
+                videos={state.videos}
+                staffList={state.staffList}
+                weights={state.weights}
               />
             )}
           </>

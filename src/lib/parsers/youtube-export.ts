@@ -9,17 +9,23 @@ export const REQUIRED_COLUMNS = {
 } as const;
 
 export const OPTIONAL_COLUMNS: Record<OptionalColumnKey, string> = {
-  duration: "thời lượng",
-  watchTime: "thời gian xem (giờ)",
-  subscribers: "số người đăng ký",
-  revenue: "doanh thu ước tính (usd)",
+  publishedAt:  "thời gian xuất bản video",
+  duration:     "thời lượng",
+  watchTime:    "thời gian xem (giờ)",
+  subscribers:  "số người đăng ký",
+  revenue:      "doanh thu ước tính (usd)",
+  ctr:          "tỷ lệ nhấp của số lượt hiển thị hình thu nhỏ (%)",
+  impressions:  "số lượt hiển thị hình thu nhỏ",
 };
 
 export const OPTIONAL_COLUMN_LABELS: Record<OptionalColumnKey, string> = {
-  duration: "Thời lượng",
-  watchTime: "Thời gian xem (giờ)",
-  subscribers: "Số người đăng ký",
-  revenue: "Doanh thu ước tính (USD)",
+  publishedAt:  "Ngày xuất bản",
+  duration:     "Thời lượng",
+  watchTime:    "Thời gian xem (giờ)",
+  subscribers:  "Số người đăng ký",
+  revenue:      "Doanh thu ước tính (USD)",
+  ctr:          "Tỷ lệ nhấp (%)",
+  impressions:  "Số lượt hiển thị",
 };
 
 type RequiredColumnKey = keyof typeof REQUIRED_COLUMNS;
@@ -30,12 +36,15 @@ interface ColumnMap {
   missing: string[];
 }
 
+/** Normalize for fuzzy matching: lowercase + remove diacritics + collapse whitespace */
+function norm(s: string): string {
+  return s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, " ").trim();
+}
+
 function detectColumns(headerRow: unknown[]): ColumnMap {
   const headerIndex = new Map<string, number>();
   for (let i = 0; i < headerRow.length; i++) {
-    const name = String(headerRow[i] ?? "")
-      .trim()
-      .toLowerCase();
+    const name = String(headerRow[i] ?? "").trim().toLowerCase();
     if (name) headerIndex.set(name, i);
   }
 
@@ -62,10 +71,22 @@ function detectColumns(headerRow: unknown[]): ColumnMap {
   }
 
   for (const [key, name] of Object.entries(OPTIONAL_COLUMNS) as [OptionalColumnKey, string][]) {
-    const idx = headerIndex.get(name.toLowerCase());
-    if (idx !== undefined) {
-      optional[key] = idx;
+    const needle = norm(name);
+    // 1. Exact match
+    let idx = headerIndex.get(name.toLowerCase());
+    // 2. Normalized exact match (handles Unicode NFC/NFD differences)
+    if (idx === undefined) {
+      for (const [h, i] of headerIndex.entries()) {
+        if (norm(h) === needle) { idx = i; break; }
+      }
     }
+    // 3. Partial match fallback
+    if (idx === undefined) {
+      for (const [h, i] of headerIndex.entries()) {
+        if (norm(h).includes(needle) || needle.includes(norm(h))) { idx = i; break; }
+      }
+    }
+    if (idx !== undefined) optional[key] = idx;
   }
 
   return { required, optional, missing };
@@ -88,9 +109,41 @@ export type ParseResult = ParseSuccess | ParseFailure;
 
 const VIDEO_ID_REGEX = /^[a-zA-Z0-9_-]{11}$/;
 
+/** Excel serial → JS Date (days since 1899-12-30) */
+function excelSerialToDate(serial: number): Date {
+  return new Date(Math.round((serial - 25569) * 86400 * 1000));
+}
+
+export function parsePublishedMonth(raw: unknown): string {
+  if (raw === null || raw === undefined || raw === "") return "";
+
+  let d: Date;
+  if (raw instanceof Date) {
+    d = raw;
+  } else if (typeof raw === "number") {
+    // Excel serial date (e.g. 46066 = Feb 18 2026)
+    d = excelSerialToDate(raw);
+  } else {
+    // String: "Feb 18, 2026" / "18 Feb 2026" / "2026-02-18" / "18/02/2026"
+    const s = String(raw).trim();
+    if (!s) return "";
+    d = new Date(s);
+    // Try DD/MM/YYYY fallback
+    if (isNaN(d.getTime())) {
+      const parts = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+      if (parts) d = new Date(`${parts[3]}-${parts[2].padStart(2, "0")}-${parts[1].padStart(2, "0")}`);
+    }
+  }
+
+  if (isNaN(d.getTime())) return "";
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  return `${y}-${m}`;
+}
+
 export function parseYouTubeExport(buffer: ArrayBuffer): ParseResult {
   try {
-    const workbook = XLSX.read(buffer, { type: "array" });
+    const workbook = XLSX.read(buffer, { type: "array", cellDates: true });
     const sheet = workbook.Sheets[workbook.SheetNames[0]];
     const raw = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1 });
 
@@ -131,6 +184,14 @@ export function parseYouTubeExport(buffer: ArrayBuffer): ParseResult {
         views: isNaN(views) ? 0 : views,
       };
 
+      if (colMap.optional.publishedAt !== undefined) {
+        const raw_val = row[colMap.optional.publishedAt];
+        if (raw_val !== null && raw_val !== undefined && raw_val !== "") {
+          entry.publishedAt = String(raw_val).trim();
+          const month = parsePublishedMonth(raw_val);
+          if (month) entry.publishedMonth = month;
+        }
+      }
       if (colMap.optional.duration !== undefined) {
         const v = Number(row[colMap.optional.duration]);
         if (!isNaN(v)) entry.duration = v;
@@ -146,6 +207,14 @@ export function parseYouTubeExport(buffer: ArrayBuffer): ParseResult {
       if (colMap.optional.revenue !== undefined) {
         const v = parseFloat(String(row[colMap.optional.revenue] ?? ""));
         if (!isNaN(v)) entry.revenue = v;
+      }
+      if (colMap.optional.ctr !== undefined) {
+        const v = parseFloat(String(row[colMap.optional.ctr] ?? ""));
+        if (!isNaN(v)) entry.ctr = v;
+      }
+      if (colMap.optional.impressions !== undefined) {
+        const v = parseInt(String(row[colMap.optional.impressions] ?? ""), 10);
+        if (!isNaN(v)) entry.impressions = v;
       }
 
       rows.push(entry);

@@ -3,13 +3,17 @@ import type { GroupDefinition } from "@/config/groups";
 export type { GroupDefinition };
 
 export interface VideoRow {
-  youtubeId:    string;
-  title:        string;
-  views:        number;
-  duration?:    number;
-  watchTime?:   number;
-  subscribers?: number;
-  revenue?:     number;
+  youtubeId:       string;
+  title:           string;
+  views:           number;
+  publishedAt?:    string;
+  publishedMonth?: string;
+  duration?:       number;
+  watchTime?:      number;
+  subscribers?:    number;
+  revenue?:        number;
+  ctr?:            number;
+  impressions?:    number;
 }
 
 export type StaffRole = string;
@@ -21,8 +25,17 @@ export interface StaffMember {
   videoIds: string[];
 }
 
-export type OptionalColumnKey = "duration" | "watchTime" | "subscribers" | "revenue";
+export type OptionalColumnKey = "publishedAt" | "duration" | "watchTime" | "subscribers" | "revenue" | "ctr" | "impressions";
 export type ExportOptionalColumn = OptionalColumnKey;
+
+export interface MonthSession {
+  period:    string;
+  label:     string;
+  videos:    VideoRow[];
+  staffList: StaffMember[];
+  weights:   Record<string, number>;
+  savedAt:   number;
+}
 
 // weights: runtime overrides of GROUPS config, { "EDITOR": 60, "CONTENT": 40 }
 export interface AppState {
@@ -31,6 +44,7 @@ export interface AppState {
   detectedOptional: OptionalColumnKey[];
   staffList:        StaffMember[];
   weights:          Record<string, number>;
+  history:          MonthSession[];
 }
 
 export const INITIAL_STATE: AppState = {
@@ -39,6 +53,7 @@ export const INITIAL_STATE: AppState = {
   detectedOptional: [],
   staffList:        [],
   weights:          {},   // populated on upload from GROUPS defaults
+  history:          [],
 };
 
 export interface VideoBreakdown {
