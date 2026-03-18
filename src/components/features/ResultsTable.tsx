@@ -11,10 +11,11 @@ interface Props {
   weights:          Record<string, number>;
   detectedOptional: OptionalColumnKey[];
   onBack:           () => void;
+  onNewSession:     () => void;
 }
 
-export default function ResultsTable({ results, videos, weights, detectedOptional, onBack }: Props) {
-  const [expandedId,        setExpandedId]        = useState<string | null>(results[0]?.staffId ?? null);
+export default function ResultsTable({ results, videos, weights, detectedOptional, onBack, onNewSession }: Props) {
+  const [expandedId,        setExpandedId]        = useState<string | null>(null);
   const [showExport,        setShowExport]         = useState(false);
   const [countFilter,       setCountFilter]        = useState<number | null>(null);
   const [showUnassigned,    setShowUnassigned]     = useState(true);
@@ -93,6 +94,7 @@ export default function ResultsTable({ results, videos, weights, detectedOptiona
         </div>
         <div className="flex gap-3 mt-1">
           <button onClick={onBack} className="btn-ghost btn-sm">← Sửa</button>
+          <button onClick={onNewSession} className="btn-ghost btn-sm">↺ Tính views mới</button>
           <button onClick={() => setShowExport(true)} className="btn-primary btn-sm px-5">↓ Export Excel</button>
         </div>
       </div>

@@ -242,6 +242,7 @@ export default function App() {
                     weights={state.weights}
                     detectedOptional={state.detectedOptional}
                     onBack={() => patch({ step: 2 })}
+                    onNewSession={handleNewSession}
                   />
                 )}
               </>
