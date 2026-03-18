@@ -69,6 +69,13 @@ function StaffTable({ members, hasRevenue, hasWatch }: {
   const maxRevenue = Math.max(...sorted.map(m => m.totalRevenue), 1);
   const maxWatch   = Math.max(...sorted.map(m => m.totalWatchTime), 1);
 
+  // Totals for % contribution
+  const sumViews   = sorted.reduce((s, m) => s + m.totalViews, 0);
+  const sumWatch   = sorted.reduce((s, m) => s + m.totalWatchTime, 0);
+  const sumRevenue = sorted.reduce((s, m) => s + m.totalRevenue, 0);
+  const sumSubs    = sorted.reduce((s, m) => s + m.totalSubscribers, 0);
+  const hasSubs    = sumSubs > 0;
+
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-sm">
@@ -80,20 +87,26 @@ function StaffTable({ members, hasRevenue, hasWatch }: {
               Video
               <span className="ml-1 normal-case font-medium text-[10px] px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-500 border border-slate-200">tổng</span>
             </th>
-            <th className="px-4 py-3 text-left text-xs font-bold text-ink-tertiary uppercase tracking-wide whitespace-nowrap min-w-[160px]">
+            <th className="px-4 py-3 text-left text-xs font-bold text-ink-tertiary uppercase tracking-wide whitespace-nowrap min-w-[180px]">
               Tổng views
               <span className="ml-1 normal-case font-medium text-[10px] px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-600 border border-blue-200">tỷ lệ</span>
             </th>
             {hasWatch && (
-              <th className="px-4 py-3 text-left text-xs font-bold text-ink-tertiary uppercase tracking-wide whitespace-nowrap min-w-[140px]">
+              <th className="px-4 py-3 text-left text-xs font-bold text-ink-tertiary uppercase tracking-wide whitespace-nowrap min-w-[160px]">
                 Watch time
                 <span className="ml-1 normal-case font-medium text-[10px] px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-500 border border-slate-200">tổng</span>
               </th>
             )}
             {hasRevenue && (
-              <th className="px-4 py-3 text-left text-xs font-bold text-ink-tertiary uppercase tracking-wide whitespace-nowrap min-w-[140px]">
+              <th className="px-4 py-3 text-left text-xs font-bold text-ink-tertiary uppercase tracking-wide whitespace-nowrap min-w-[160px]">
                 Doanh thu
                 <span className="ml-1 normal-case font-medium text-[10px] px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-600 border border-blue-200">tỷ lệ</span>
+              </th>
+            )}
+            {hasSubs && (
+              <th className="px-4 py-3 text-left text-xs font-bold text-ink-tertiary uppercase tracking-wide whitespace-nowrap min-w-[140px]">
+                Subscribers
+                <span className="ml-1 normal-case font-medium text-[10px] px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-500 border border-slate-200">tổng</span>
               </th>
             )}
             <th className="px-4 pr-5 py-3 text-left text-xs font-bold text-ink-tertiary uppercase tracking-wide whitespace-nowrap">Xu hướng</th>
@@ -101,7 +114,11 @@ function StaffTable({ members, hasRevenue, hasWatch }: {
         </thead>
         <tbody className="divide-y divide-border">
           {sorted.map((m, i) => {
-            const trend = TREND_CONFIG[m.trendLabel];
+            const trend      = TREND_CONFIG[m.trendLabel];
+            const viewsPct   = sumViews   > 0 ? (m.totalViews        / sumViews)   * 100 : 0;
+            const watchPct_  = sumWatch   > 0 ? (m.totalWatchTime    / sumWatch)   * 100 : 0;
+            const revPct     = sumRevenue > 0 ? (m.totalRevenue      / sumRevenue) * 100 : 0;
+            const subsPct    = sumSubs    > 0 ? (m.totalSubscribers  / sumSubs)    * 100 : 0;
             return (
               <tr key={m.staffName} className="hover:bg-surface-2/40">
                 <td className="pl-5 px-4 py-3 text-xs text-ink-muted font-bold">{i + 1}</td>
@@ -109,36 +126,57 @@ function StaffTable({ members, hasRevenue, hasWatch }: {
                 <td className="px-4 py-3">
                   <span className="font-mono font-bold text-ink">{m.videoCount}</span>
                 </td>
-                <td className="px-4 py-3 min-w-[160px]">
+                <td className="px-4 py-3 min-w-[180px]">
                   <div className="flex items-center gap-2">
                     <div className="w-20 h-1.5 bg-surface-2 rounded-full overflow-hidden flex-shrink-0">
                       <div className="h-full bg-accent rounded-full" style={{ width: `${(m.totalViews / maxViews) * 100}%` }} />
                     </div>
-                    <span className="font-bold text-accent text-xs whitespace-nowrap">{fmt(m.totalViews)}</span>
+                    <div>
+                      <span className="font-bold text-accent text-xs whitespace-nowrap">{fmt(m.totalViews)}</span>
+                      <span className="block text-[10px] text-ink-muted">{viewsPct.toFixed(1)}% views</span>
+                    </div>
                   </div>
                 </td>
                 {hasWatch && (
-                  <td className="px-4 py-3 min-w-[140px]">
+                  <td className="px-4 py-3 min-w-[160px]">
                     {m.totalWatchTime > 0 ? (
                       <div className="flex items-center gap-2">
                         <div className="w-16 h-1.5 bg-surface-2 rounded-full overflow-hidden flex-shrink-0">
                           <div className="h-full bg-sky-400 rounded-full" style={{ width: `${(m.totalWatchTime / maxWatch) * 100}%` }} />
                         </div>
-                        <span className="text-xs font-semibold text-sky-600 whitespace-nowrap">
-                          {m.totalWatchTime >= 1000 ? `${(m.totalWatchTime / 1000).toFixed(1)}K` : m.totalWatchTime.toFixed(1)}h
-                        </span>
+                        <div>
+                          <span className="text-xs font-semibold text-sky-600 whitespace-nowrap">
+                            {m.totalWatchTime >= 1000 ? `${(m.totalWatchTime / 1000).toFixed(1)}K` : m.totalWatchTime.toFixed(1)}h
+                          </span>
+                          <span className="block text-[10px] text-ink-muted">{watchPct_.toFixed(1)}% watch time</span>
+                        </div>
                       </div>
                     ) : <span className="text-xs text-ink-muted">—</span>}
                   </td>
                 )}
                 {hasRevenue && (
-                  <td className="px-4 py-3 min-w-[140px]">
+                  <td className="px-4 py-3 min-w-[160px]">
                     {m.totalRevenue > 0 ? (
                       <div className="flex items-center gap-2">
                         <div className="w-16 h-1.5 bg-surface-2 rounded-full overflow-hidden flex-shrink-0">
                           <div className="h-full bg-emerald-400 rounded-full" style={{ width: `${(m.totalRevenue / maxRevenue) * 100}%` }} />
                         </div>
-                        <span className="text-xs font-bold text-emerald-600 whitespace-nowrap">${m.totalRevenue.toFixed(2)}</span>
+                        <div>
+                          <span className="text-xs font-bold text-emerald-600 whitespace-nowrap">${m.totalRevenue.toFixed(2)}</span>
+                          <span className="block text-[10px] text-ink-muted">{revPct.toFixed(1)}% doanh thu</span>
+                        </div>
+                      </div>
+                    ) : <span className="text-xs text-ink-muted">—</span>}
+                  </td>
+                )}
+                {hasSubs && (
+                  <td className="px-4 py-3 min-w-[140px]">
+                    {m.totalSubscribers > 0 ? (
+                      <div>
+                        <span className="text-xs font-semibold text-violet-600 whitespace-nowrap">
+                          {m.totalSubscribers > 0 ? `+${fmt(m.totalSubscribers)}` : fmt(m.totalSubscribers)}
+                        </span>
+                        <span className="block text-[10px] text-ink-muted">{subsPct.toFixed(1)}% subscribers</span>
                       </div>
                     ) : <span className="text-xs text-ink-muted">—</span>}
                   </td>
@@ -172,6 +210,13 @@ function StaffTable({ members, hasRevenue, hasWatch }: {
               <td className="px-4 py-2">
                 <span className="text-xs font-bold text-emerald-600">
                   ${sorted.reduce((s, m) => s + m.totalRevenue, 0).toFixed(2)}
+                </span>
+              </td>
+            )}
+            {hasSubs && (
+              <td className="px-4 py-2">
+                <span className="text-xs font-semibold text-violet-600">
+                  +{fmt(sorted.reduce((s, m) => s + m.totalSubscribers, 0))}
                 </span>
               </td>
             )}

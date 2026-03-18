@@ -54,6 +54,11 @@ function RoleGroup({ role, members, hasRevenue }: { role: string; members: AggSt
   const maxWatch   = Math.max(...members.map(m => m.totalWatchTime), 1);
   const maxRevenue = Math.max(...members.map(m => m.totalRevenue), 1);
 
+  // Totals for % contribution (within this role group)
+  const sumViews   = members.reduce((s, m) => s + m.totalViews, 0);
+  const sumWatch   = members.reduce((s, m) => s + m.totalWatchTime, 0);
+  const sumRevenue = members.reduce((s, m) => s + m.totalRevenue, 0);
+
   return (
     <div className="card overflow-hidden">
       <div className="px-5 py-4 border-b border-border flex items-center gap-2">
@@ -76,16 +81,16 @@ function RoleGroup({ role, members, hasRevenue }: { role: string; members: AggSt
                 Watch time TB
                 <span className="ml-1 normal-case font-medium text-[10px] px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-500 border border-slate-200">tổng</span>
               </th>
-              <th className="px-4 py-3 text-left text-xs font-bold text-ink-tertiary uppercase tracking-wide whitespace-nowrap">
+              <th className="px-4 py-3 text-left text-xs font-bold text-ink-tertiary uppercase tracking-wide whitespace-nowrap min-w-[160px]">
                 Tổng watch time
                 <span className="ml-1 normal-case font-medium text-[10px] px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-500 border border-slate-200">tổng</span>
               </th>
-              <th className="px-4 py-3 text-left text-xs font-bold text-ink-tertiary uppercase tracking-wide whitespace-nowrap">
+              <th className="px-4 py-3 text-left text-xs font-bold text-ink-tertiary uppercase tracking-wide whitespace-nowrap min-w-[160px]">
                 Tổng views
                 <span className="ml-1 normal-case font-medium text-[10px] px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-600 border border-blue-200">tỷ lệ</span>
               </th>
               {hasRevenue && (
-                <th className="px-4 py-3 text-left text-xs font-bold text-ink-tertiary uppercase tracking-wide whitespace-nowrap">
+                <th className="px-4 py-3 text-left text-xs font-bold text-ink-tertiary uppercase tracking-wide whitespace-nowrap min-w-[160px]">
                   Tổng doanh thu
                   <span className="ml-1 normal-case font-medium text-[10px] px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-600 border border-blue-200">tỷ lệ</span>
                 </th>
@@ -95,10 +100,13 @@ function RoleGroup({ role, members, hasRevenue }: { role: string; members: AggSt
           </thead>
           <tbody className="divide-y divide-border">
             {ranked.map((m, i) => {
-              const trendCfg = TREND_CONFIG[m.trendLabel];
-              const viewsPct   = (m.totalViews / maxViews) * 100;
-              const watchPct   = (m.totalWatchTime / maxWatch) * 100;
-              const revenuePct = hasRevenue ? (m.totalRevenue / maxRevenue) * 100 : 0;
+              const trendCfg   = TREND_CONFIG[m.trendLabel];
+              const barViewsPct  = (m.totalViews / maxViews) * 100;
+              const barWatchPct  = (m.totalWatchTime / maxWatch) * 100;
+              const barRevPct    = hasRevenue ? (m.totalRevenue / maxRevenue) * 100 : 0;
+              const contribViewsPct = sumViews   > 0 ? (m.totalViews     / sumViews)   * 100 : 0;
+              const contribWatchPct = sumWatch   > 0 ? (m.totalWatchTime / sumWatch)   * 100 : 0;
+              const contribRevPct   = sumRevenue > 0 ? (m.totalRevenue   / sumRevenue) * 100 : 0;
               return (
                 <tr key={m.staffName} className="hover:bg-surface-2/40">
                   <td className="pl-5 px-4 py-4">
@@ -120,35 +128,42 @@ function RoleGroup({ role, members, hasRevenue }: { role: string; members: AggSt
                     </p>
                     {m.totalWatchTime > 0 && (
                       <div className="h-1 bg-surface-2 rounded-full overflow-hidden w-20">
-                        <div className="h-full bg-sky-400 rounded-full" style={{ width: `${watchPct}%` }} />
+                        <div className="h-full bg-sky-400 rounded-full" style={{ width: `${barWatchPct}%` }} />
                       </div>
                     )}
                   </td>
 
-                  {/* Total watch time */}
-                  <td className="px-4 py-4">
-                    <span className="font-mono font-semibold text-ink text-xs">
-                      {m.totalWatchTime > 0 ? `${formatNum(m.totalWatchTime)}h` : "—"}
-                    </span>
+                  {/* Total watch time + % */}
+                  <td className="px-4 py-4 min-w-[160px]">
+                    {m.totalWatchTime > 0 ? (
+                      <div>
+                        <span className="font-mono font-semibold text-ink text-xs">
+                          {formatNum(m.totalWatchTime)}h
+                        </span>
+                        <span className="block text-[10px] text-ink-muted">{contribWatchPct.toFixed(1)}% watch time</span>
+                      </div>
+                    ) : <span className="text-xs text-ink-muted">—</span>}
                   </td>
 
-                  {/* Total views */}
-                  <td className="px-4 py-4 min-w-[140px]">
-                    <p className="font-bold text-accent text-sm mb-1">{formatNum(m.totalViews)}</p>
-                    <div className="h-1.5 bg-surface-2 rounded-full overflow-hidden w-24">
-                      <div className="h-full bg-accent rounded-full" style={{ width: `${viewsPct}%` }} />
+                  {/* Total views + % */}
+                  <td className="px-4 py-4 min-w-[160px]">
+                    <p className="font-bold text-accent text-sm mb-0.5">{formatNum(m.totalViews)}</p>
+                    <div className="h-1.5 bg-surface-2 rounded-full overflow-hidden w-24 mb-0.5">
+                      <div className="h-full bg-accent rounded-full" style={{ width: `${barViewsPct}%` }} />
                     </div>
+                    <span className="text-[10px] text-ink-muted">{contribViewsPct.toFixed(1)}% views</span>
                   </td>
 
-                  {/* Revenue */}
+                  {/* Revenue + % */}
                   {hasRevenue && (
-                    <td className="px-4 py-4 min-w-[120px]">
+                    <td className="px-4 py-4 min-w-[160px]">
                       {m.totalRevenue > 0 ? (
                         <>
-                          <p className="font-bold text-emerald-600 text-sm mb-1">${m.totalRevenue.toFixed(2)}</p>
-                          <div className="h-1 bg-surface-2 rounded-full overflow-hidden w-20">
-                            <div className="h-full bg-emerald-400 rounded-full" style={{ width: `${revenuePct}%` }} />
+                          <p className="font-bold text-emerald-600 text-sm mb-0.5">${m.totalRevenue.toFixed(2)}</p>
+                          <div className="h-1 bg-surface-2 rounded-full overflow-hidden w-20 mb-0.5">
+                            <div className="h-full bg-emerald-400 rounded-full" style={{ width: `${barRevPct}%` }} />
                           </div>
+                          <span className="text-[10px] text-ink-muted">{contribRevPct.toFixed(1)}% doanh thu</span>
                         </>
                       ) : (
                         <span className="text-xs text-ink-muted">—</span>
