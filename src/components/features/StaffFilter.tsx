@@ -2,8 +2,16 @@ import { useRef, useState, useMemo } from "react";
 import * as XLSX from "xlsx";
 import { parseStaffSheet } from "@/lib/parsers/staff-sheet";
 import { groupVideosByStaff, formatVideoIdList } from "@/lib/services/staff-video-filter";
+import { GROUPS } from "@/config/groups";
 import type { StaffVideoGroup } from "@/lib/services/staff-video-filter";
 import type { StaffSheetParseSuccess } from "@/lib/parsers/staff-sheet";
+
+function inferRole(name: string): string {
+  const u = name.toUpperCase();
+  if (u.startsWith("ED ") || u.startsWith("ED_")) return "EDITOR";
+  if (u.startsWith("CT ") || u.startsWith("CT_")) return "CONTENT";
+  return GROUPS[0].key;
+}
 
 export default function StaffFilter() {
   const [parseResult, setParseResult] = useState<StaffSheetParseSuccess | null>(null);
@@ -14,7 +22,18 @@ export default function StaffFilter() {
   const [copiedName,  setCopiedName]  = useState<string | null>(null);
   const [parseError,  setParseError]  = useState("");
   const [dragging,    setDragging]    = useState(false);
+  const [roles,       setRoles]       = useState<Map<string, string>>(new Map());
   const fileRef = useRef<HTMLInputElement>(null);
+
+  const setRole = (staffName: string, role: string) =>
+    setRoles(prev => new Map(prev).set(staffName, role));
+
+  const cycleRole = (staffName: string) => {
+    const current = roles.get(staffName) ?? GROUPS[0].key;
+    const idx = GROUPS.findIndex(g => g.key === current);
+    const next = GROUPS[(idx + 1) % GROUPS.length].key;
+    setRole(staffName, next);
+  };
 
   const loadFile = (file: File) => {
     setParseError("");
@@ -28,6 +47,7 @@ export default function StaffFilter() {
       setSelected(new Set(grouped.map(g => g.staffName)));
       setExpanded(new Set());
       setSearch("");
+      setRoles(new Map(grouped.map(g => [g.staffName, inferRole(g.staffName)])));
     };
     reader.readAsArrayBuffer(file);
   };
@@ -52,6 +72,7 @@ export default function StaffFilter() {
     setExpanded(new Set());
     setSearch("");
     setParseError("");
+    setRoles(new Map());
   };
 
   const filteredGroups = useMemo(() => {
@@ -87,19 +108,25 @@ export default function StaffFilter() {
     const wb  = XLSX.utils.book_new();
 
     const ws1 = XLSX.utils.aoa_to_sheet([
-      ["Tên nhân sự", "Số video", "Video IDs (paste vào yt-tracker)"],
-      ...sel.map(g => [g.staffName, g.videoCount, g.videoIds.join("\n")]),
+      ["Tên nhân sự", "Vai trò", "Số video", "Video IDs (paste vào yt-tracker)"],
+      ...sel.map(g => {
+        const roleKey   = roles.get(g.staffName) ?? GROUPS[0].key;
+        const roleLabel = GROUPS.find(r => r.key === roleKey)?.label ?? roleKey;
+        return [g.staffName, roleLabel, g.videoCount, g.videoIds.join("\n")];
+      }),
     ]);
-    ws1["!cols"] = [{ wch: 25 }, { wch: 10 }, { wch: 80 }];
+    ws1["!cols"] = [{ wch: 25 }, { wch: 12 }, { wch: 10 }, { wch: 80 }];
     XLSX.utils.book_append_sheet(wb, ws1, "Staff → Video IDs");
 
     const ws2 = XLSX.utils.aoa_to_sheet([
-      ["Tên nhân sự", "Video ID", "Tiêu đề", "Trạng thái", "Ngày đăng"],
-      ...sel.flatMap(g =>
-        g.videos.map(v => [g.staffName, v.videoId, v.title, v.status, v.publishedAt])
-      ),
+      ["Tên nhân sự", "Vai trò", "Video ID", "Tiêu đề", "Trạng thái", "Ngày đăng"],
+      ...sel.flatMap(g => {
+        const roleKey   = roles.get(g.staffName) ?? GROUPS[0].key;
+        const roleLabel = GROUPS.find(r => r.key === roleKey)?.label ?? roleKey;
+        return g.videos.map(v => [g.staffName, roleLabel, v.videoId, v.title, v.status, v.publishedAt]);
+      }),
     ]);
-    ws2["!cols"] = [{ wch: 25 }, { wch: 14 }, { wch: 60 }, { wch: 12 }, { wch: 14 }];
+    ws2["!cols"] = [{ wch: 25 }, { wch: 12 }, { wch: 14 }, { wch: 60 }, { wch: 12 }, { wch: 14 }];
     XLSX.utils.book_append_sheet(wb, ws2, "Chi tiết");
 
     XLSX.writeFile(wb, "staff-video-ids.xlsx");
@@ -201,10 +228,12 @@ export default function StaffFilter() {
         )}
 
         {filteredGroups.map(group => {
-          const isSelected = selected.has(group.staffName);
-          const isExpanded = expanded.has(group.staffName);
-          const isCopied   = copiedName === group.staffName;
+          const isSelected   = selected.has(group.staffName);
+          const isExpanded   = expanded.has(group.staffName);
+          const isCopied     = copiedName === group.staffName;
           const isUnassigned = group.staffName === "— Chưa phân công";
+          const roleKey      = roles.get(group.staffName) ?? GROUPS[0].key;
+          const roleGroup    = GROUPS.find(g => g.key === roleKey) ?? GROUPS[0];
 
           return (
             <div key={group.staffName} className="card overflow-hidden">
@@ -230,6 +259,15 @@ export default function StaffFilter() {
                   <span className="text-xs bg-surface-2 text-ink-muted px-2 py-0.5 rounded-full border border-border flex-shrink-0">
                     {group.videoCount} video
                   </span>
+                  {!isUnassigned && (
+                    <button
+                      onClick={() => cycleRole(group.staffName)}
+                      title="Click để đổi vai trò"
+                      className={`text-xs font-semibold px-2 py-0.5 rounded-full border flex-shrink-0 transition-all ${roleGroup.color.bg} ${roleGroup.color.text} ${roleGroup.color.border}`}
+                    >
+                      {roleGroup.label}
+                    </button>
+                  )}
                 </div>
 
                 {/* Actions */}

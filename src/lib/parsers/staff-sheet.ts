@@ -3,7 +3,7 @@ import * as XLSX from "xlsx";
 // ── Column aliases ─────────────────────────────────────────────────────────────
 
 export const STAFF_SHEET_COLUMNS = {
-  videoId:     ["video id", "video_id", "id"],
+  videoId:     ["my video id", "video id", "video_id", "id"],
   staffName:   ["tên người làm", "ten nguoi lam", "người làm", "staff"],
   title:       ["tiêu đề", "tieu de", "title", "tên bài", "ten bai"],
   status:      ["trạng thái", "trang thai", "status"],

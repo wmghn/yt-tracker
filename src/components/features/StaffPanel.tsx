@@ -1,7 +1,18 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
+import * as XLSX from "xlsx";
+import { v4 as uuid } from "uuid";
 import type { StaffMember, VideoRow } from "@/types";
 import { GROUPS } from "@/config/groups";
 import StaffCard from "./StaffCard";
+
+const VIDEO_ID_REGEX = /^[a-zA-Z0-9_-]{11}$/;
+
+function inferRoleFromName(name: string): string {
+  const upper = name.toUpperCase();
+  if (upper.startsWith("ED ") || upper.startsWith("ED_")) return "EDITOR";
+  if (upper.startsWith("CT ") || upper.startsWith("CT_")) return "CONTENT";
+  return GROUPS[0].key;
+}
 
 interface Props {
   staffList:        StaffMember[];
@@ -18,6 +29,92 @@ export default function StaffPanel({
   onChange, onWeightsChange, onNext, onBack,
 }: Props) {
   const [showNew, setShowNew] = useState(staffList.length === 0);
+  const importRef = useRef<HTMLInputElement>(null);
+  const [importMsg,  setImportMsg]  = useState<{ ok: boolean; text: string } | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+
+  const processImportFile = (file: File) => {
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      try {
+        const wb = XLSX.read(ev.target!.result as ArrayBuffer, { type: "array" });
+        const sheetName = wb.SheetNames.find((n) => n.toLowerCase().includes("staff")) ?? wb.SheetNames[0];
+        const ws  = wb.Sheets[sheetName];
+        const raw = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1 });
+        if (raw.length < 2) throw new Error("empty");
+
+        // Detect columns from header row
+        const header = (raw[0] as unknown[]).map((c) => String(c ?? "").toLowerCase().trim());
+        const colName    = header.findIndex((h) => h.includes("tên nhân sự") || h === "tên");
+        const colRole    = header.findIndex((h) => h.includes("vai trò") || h === "role");
+        const colIds     = header.findIndex((h) => h.includes("video id"));
+        // Fallback to fixed positions for old exports without role column
+        const nameIdx  = colName  !== -1 ? colName  : 0;
+        const roleIdx  = colRole  !== -1 ? colRole  : -1;
+        const idsIdx   = colIds   !== -1 ? colIds   : (colRole !== -1 ? 3 : 2);
+
+        // Build role lookup: label → key (e.g. "Editor" → "EDITOR")
+        const roleLabelToKey = new Map(GROUPS.map((g) => [g.label.toLowerCase(), g.key]));
+
+        const imported: StaffMember[] = [];
+        for (let i = 1; i < raw.length; i++) {
+          const row = raw[i] as unknown[];
+          if (!row?.length) continue;
+          const name = String(row[nameIdx] ?? "").trim();
+          if (!name) continue;
+
+          // Role: from column if present, otherwise infer from name prefix
+          let role = inferRoleFromName(name);
+          if (roleIdx !== -1) {
+            const label = String(row[roleIdx] ?? "").toLowerCase().trim();
+            role = roleLabelToKey.get(label) ?? inferRoleFromName(name);
+          }
+
+          const rawIds = String(row[idsIdx] ?? "").trim();
+          const videoIds = rawIds
+            .split(/[\n\r]+/)
+            .map((s) => s.trim())
+            .filter((s) => VIDEO_ID_REGEX.test(s));
+          imported.push({ id: uuid(), name, role, videoIds });
+        }
+
+        if (imported.length === 0) {
+          setImportMsg({ ok: false, text: "Không tìm thấy dữ liệu nhân sự. Đảm bảo đây là file export từ Lọc Video ID." });
+          setTimeout(() => setImportMsg(null), 4000);
+          return;
+        }
+
+        const existingNames = new Set(staffList.map((s) => s.name));
+        const toAdd = imported.filter((s) => !existingNames.has(s.name));
+        onChange([...staffList, ...toAdd]);
+        setShowNew(false);
+        const skipped = imported.length - toAdd.length;
+        setImportMsg({
+          ok: true,
+          text: `Đã import ${toAdd.length} nhân sự${skipped > 0 ? ` · ${skipped} trùng tên bỏ qua` : ""}.`,
+        });
+        setTimeout(() => setImportMsg(null), 4000);
+      } catch {
+        setImportMsg({ ok: false, text: "Không đọc được file. Đảm bảo đây là file .xlsx từ Lọc Video ID." });
+        setTimeout(() => setImportMsg(null), 4000);
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  };
+
+  const handleImportFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = "";
+    processImportFile(file);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file) processImportFile(file);
+  };
 
   const handleSave = (staff: StaffMember) => {
     const exists = staffList.find((s) => s.id === staff.id);
@@ -41,7 +138,7 @@ export default function StaffPanel({
 
   return (
     <div className="max-w-2xl mx-auto">
-      <div className="flex items-start justify-between mb-8">
+      <div className="flex items-start justify-between mb-6">
         <div>
           <h1 className="text-3xl font-bold text-ink mb-2">Nhân sự & Video IDs</h1>
           <p className="text-base text-ink-tertiary">Thêm nhân sự, dán video ID, và điều chỉnh tỷ trọng.</p>
@@ -50,6 +147,34 @@ export default function StaffPanel({
           ✎ Sửa file Excel
         </button>
       </div>
+
+      {/* --- Import zone --- */}
+      <div
+        onClick={() => importRef.current?.click()}
+        onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+        onDragLeave={() => setIsDragging(false)}
+        onDrop={handleDrop}
+        className={`mb-6 flex items-center gap-3 px-5 py-3.5 rounded-2xl border-2 border-dashed cursor-pointer transition-all select-none ${
+          isDragging
+            ? "border-blue-400 bg-blue-50 text-blue-600"
+            : "border-border hover:border-blue-400 text-ink-muted hover:text-blue-600"
+        }`}
+      >
+        <span className="text-lg">↑</span>
+        <span className="text-sm font-medium flex-1">
+          {isDragging ? "Thả file vào đây..." : "Import từ file Lọc Video ID (.xlsx) — hoặc kéo thả vào đây"}
+        </span>
+        {importMsg && (
+          <span className={`text-xs font-semibold px-2.5 py-1 rounded-full border ${
+            importMsg.ok
+              ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+              : "bg-red-50 text-red-600 border-red-200"
+          }`}>
+            {importMsg.ok ? "✓" : "✗"} {importMsg.text}
+          </span>
+        )}
+      </div>
+      <input ref={importRef} type="file" accept=".xlsx" className="hidden" onChange={handleImportFile} />
 
       {/* --- Inline weight editor --- */}
       <div className="card p-5 mb-6">

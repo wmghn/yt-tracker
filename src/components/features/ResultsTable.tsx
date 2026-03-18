@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import type { StaffAttribution, OptionalColumnKey, ExportOptionalColumn, ExportConfig } from "@/types";
+import type { StaffAttribution, OptionalColumnKey, ExportOptionalColumn, ExportConfig, VideoRow } from "@/types";
 import { GROUPS, getGroup } from "@/config/groups";
 import { formatFormula } from "@/lib/services/attribution";
 import { exportToExcel } from "@/lib/exporters/excel-export";
@@ -7,15 +7,22 @@ import ExportModal from "./ExportModal";
 
 interface Props {
   results:          StaffAttribution[];
+  videos:           VideoRow[];
   weights:          Record<string, number>;
   detectedOptional: OptionalColumnKey[];
   onBack:           () => void;
 }
 
-export default function ResultsTable({ results, weights, detectedOptional, onBack }: Props) {
-  const [expandedId,  setExpandedId]  = useState<string | null>(results[0]?.staffId ?? null);
-  const [showExport,  setShowExport]  = useState(false);
-  const [countFilter, setCountFilter] = useState<number | null>(null);
+export default function ResultsTable({ results, videos, weights, detectedOptional, onBack }: Props) {
+  const [expandedId,        setExpandedId]        = useState<string | null>(results[0]?.staffId ?? null);
+  const [showExport,        setShowExport]         = useState(false);
+  const [countFilter,       setCountFilter]        = useState<number | null>(null);
+  const [showUnassigned,    setShowUnassigned]     = useState(true);
+
+  const unassignedVideos = useMemo(() => {
+    const assigned = new Set(results.flatMap((r) => r.videos.map((v) => v.youtubeId)));
+    return videos.filter((v) => !assigned.has(v.youtubeId));
+  }, [results, videos]);
 
   // Build set of distinct contributor counts across ALL videos in ALL staff
   const allCounts = useMemo(() => {
@@ -45,7 +52,16 @@ export default function ResultsTable({ results, weights, detectedOptional, onBac
     setShowExport(false);
   };
 
-  const hasRevenue = detectedOptional.includes("revenue");
+  const hasRevenue   = detectedOptional.includes("revenue");
+  const hasDuration  = detectedOptional.includes("duration");
+
+  const fmtDuration = (secs: number): string => {
+    const h = Math.floor(secs / 3600);
+    const m = Math.floor((secs % 3600) / 60);
+    const s = Math.floor(secs % 60);
+    if (h > 0) return `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+    return `${m}:${String(s).padStart(2, "0")}`;
+  };
 
   /** Revenue một nhân sự nhận được từ một video: revenue × groupWeight / membersInGroup */
   const videoRevenueEarned = (v: { revenue?: number; groupWeight: number; membersInGroup: number }): number | undefined =>
@@ -59,7 +75,7 @@ export default function ResultsTable({ results, weights, detectedOptional, onBac
   const uniqueVideos = new Set(filteredResults.flatMap((r) => r.videos.map((v) => v.youtubeId))).size;
 
   return (
-    <div className="max-w-5xl mx-auto">
+    <div className="max-w-7xl mx-auto">
       {/* Page header */}
       <div className="flex items-start justify-between mb-6">
         <div>
@@ -86,13 +102,21 @@ export default function ResultsTable({ results, weights, detectedOptional, onBac
         {[
           { label: "Tổng views phân bổ", value: totalViews.toLocaleString("vi-VN") },
           { label: "Nhân sự", value: String(filteredResults.length) },
-          { label: "Videos được track", value: String(uniqueVideos) },
         ].map(({ label, value }) => (
           <div key={label} className="card p-5">
             <p className="text-sm text-ink-tertiary mb-1">{label}</p>
             <p className="text-2xl font-bold text-ink">{value}</p>
           </div>
         ))}
+        <div className="card p-5">
+          <p className="text-sm text-ink-tertiary mb-1">Videos được track</p>
+          <div className="flex items-baseline gap-2">
+            <p className="text-2xl font-bold text-ink">{uniqueVideos}</p>
+            {unassignedVideos.length > 0 && (
+              <span className="text-sm font-semibold text-amber-600">/ {videos.length}</span>
+            )}
+          </div>
+        </div>
         {hasRevenue && (
           <div className="card p-5">
             <p className="text-sm text-ink-tertiary mb-1">Tổng doanh thu</p>
@@ -100,6 +124,57 @@ export default function ResultsTable({ results, weights, detectedOptional, onBac
           </div>
         )}
       </div>
+
+      {/* Unassigned videos */}
+      {unassignedVideos.length > 0 && (
+        <div className="card overflow-hidden mb-6">
+          <div
+            className="flex items-center gap-3 px-6 py-4 cursor-pointer hover:bg-amber-50/60 transition-colors"
+            onClick={() => setShowUnassigned((v) => !v)}
+          >
+            <span className="text-base">⚠</span>
+            <div className="flex-1">
+              <span className="font-semibold text-amber-700 text-sm">
+                {unassignedVideos.length} video chưa được gán cho nhân sự nào
+              </span>
+            </div>
+            <span className={`text-ink-muted text-sm transition-transform duration-200 ${showUnassigned ? "rotate-180" : ""}`}>▼</span>
+          </div>
+          {showUnassigned && (
+            <div className="border-t border-amber-100 overflow-x-auto animate-in">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-amber-50">
+                    {["Tiêu đề video", "Video ID", "Tổng views"].map((h, i) => (
+                      <th key={h} className={`text-xs font-bold text-amber-700 uppercase tracking-wide px-4 py-3 text-left whitespace-nowrap ${i === 0 ? "pl-6" : ""} ${i === 2 ? "pr-6" : ""}`}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {unassignedVideos.map((v) => (
+                    <tr key={v.youtubeId} className="hover:bg-amber-50/40 transition-colors">
+                      <td className="pl-6 pr-4 py-3 font-medium text-ink">{v.title}</td>
+                      <td className="px-4 py-3">
+                        <a
+                          href={`https://youtube.com/watch?v=${v.youtubeId}`}
+                          target="_blank" rel="noopener noreferrer"
+                          className="font-mono text-xs text-blue-500 hover:underline"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          {v.youtubeId}
+                        </a>
+                      </td>
+                      <td className="px-4 pr-6 py-3 font-mono text-ink-secondary whitespace-nowrap">
+                        {v.views.toLocaleString("vi-VN")}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* ── Contributor count filter ──────────────────────────────────────── */}
       {allCounts.length > 1 && (
@@ -193,38 +268,54 @@ export default function ResultsTable({ results, weights, detectedOptional, onBac
               {/* Video detail table */}
               {isOpen && (
                 <div className="border-t border-border animate-in">
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
+                  <div>
+                    <table className="w-full text-sm table-fixed">
+                      <colgroup>
+                        <col className="w-[26%]" />
+                        <col className="w-[9%]" />
+                        <col className="w-[8%]" />
+                        {hasDuration && <col className="w-[6%]" />}
+                        <col className="w-[15%]" />
+                        <col className={hasDuration ? "w-[21%]" : "w-[24%]"} />
+                        <col className="w-[8%]" />
+                        {hasRevenue && <col className="w-[7%]" />}
+                      </colgroup>
                       <thead>
                         <tr className="bg-surface-2">
                           {[
-                            "Tiêu đề video", "Video ID", "Tổng views", "Người làm", "Công thức", "Views nhận",
+                            "Tiêu đề video", "Video ID", "Tổng views",
+                            ...(hasDuration ? ["Thời lượng"] : []),
+                            "Người làm", "Công thức", "Views nhận",
                             ...(hasRevenue ? ["Doanh thu"] : []),
                           ].map((h, i, arr) => (
-                            <th key={h} className={`text-xs font-bold text-ink-tertiary uppercase tracking-wide px-4 py-3 ${i === 0 ? "pl-6" : ""} ${i === arr.length - 1 ? "text-right pr-6" : "text-left"} whitespace-nowrap`}>{h}</th>
+                            <th key={h} className={`text-xs font-bold text-ink-tertiary uppercase tracking-wide px-3 py-3 ${i === 0 ? "pl-6" : ""} ${i === arr.length - 1 ? "text-right pr-6" : "text-left"} whitespace-nowrap`}>{h}</th>
                           ))}
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-border">
                         {r.videos.map((v) => (
                           <tr key={v.youtubeId} className="hover:bg-surface-2/40 transition-colors">
-                            <td className="pl-6 pr-4 py-4">
-                              <p className="font-medium text-ink">{v.title}</p>
+                            <td className="pl-6 pr-3 py-3">
+                              <p className="font-medium text-ink text-sm leading-snug">{v.title}</p>
                             </td>
-                            <td className="px-4 py-4">
+                            <td className="px-3 py-3">
                               <a href={`https://youtube.com/watch?v=${v.youtubeId}`}
                                 target="_blank" rel="noopener noreferrer"
-                                className="font-mono text-xs text-blue-500 hover:underline"
+                                className="font-mono text-xs text-blue-500 hover:underline break-all"
                                 onClick={(e) => e.stopPropagation()}>
                                 {v.youtubeId}
                               </a>
                             </td>
-                            <td className="px-4 py-4 font-mono font-medium text-ink-secondary whitespace-nowrap">
+                            <td className="px-3 py-3 font-mono text-sm font-medium text-ink-secondary whitespace-nowrap">
                               {v.totalViews.toLocaleString("vi-VN")}
                             </td>
-                            <td className="px-4 py-4">
-                              <div className="flex flex-wrap gap-1.5 items-center">
-                                {/* Contributor count badge */}
+                            {hasDuration && (
+                              <td className="px-3 py-3 font-mono text-sm text-ink-secondary whitespace-nowrap">
+                                {v.duration ? fmtDuration(v.duration) : <span className="text-ink-muted">—</span>}
+                              </td>
+                            )}
+                            <td className="px-3 py-3">
+                              <div className="flex flex-wrap gap-1 items-center">
                                 <span className={`text-xs font-bold px-2 py-0.5 rounded-full border ${
                                   v.contributors.length === 1
                                     ? "bg-slate-50 text-slate-500 border-slate-200"
@@ -252,16 +343,16 @@ export default function ResultsTable({ results, weights, detectedOptional, onBac
                                 })}
                               </div>
                             </td>
-                            <td className="px-4 py-4">
-                              <span className="font-mono text-xs text-ink-tertiary whitespace-nowrap">
+                            <td className="px-3 py-3">
+                              <span className="font-mono text-xs text-ink-tertiary leading-relaxed">
                                 {formatFormula(v, group.label)}
                               </span>
                             </td>
-                            <td className={`px-4 py-4 text-right ${!hasRevenue ? "pr-6" : ""}`}>
-                              <span className="text-lg font-bold text-accent">{v.viewsEarned.toLocaleString("vi-VN")}</span>
+                            <td className={`px-3 py-3 text-right ${!hasRevenue ? "pr-6" : ""}`}>
+                              <span className="text-base font-bold text-accent whitespace-nowrap">{v.viewsEarned.toLocaleString("vi-VN")}</span>
                             </td>
                             {hasRevenue && (
-                              <td className="px-4 pr-6 py-4 text-right">
+                              <td className="px-3 pr-6 py-3 text-right whitespace-nowrap">
                                 {videoRevenueEarned(v) !== undefined
                                   ? <span className="text-sm font-semibold text-emerald-600">${videoRevenueEarned(v)!.toFixed(2)}</span>
                                   : <span className="text-xs text-ink-muted">—</span>
@@ -273,12 +364,12 @@ export default function ResultsTable({ results, weights, detectedOptional, onBac
                       </tbody>
                       <tfoot>
                         <tr className="bg-surface-2 border-t-2 border-border-strong">
-                          <td colSpan={5} className="pl-6 px-4 py-3 text-sm font-semibold text-ink-secondary">Tổng cộng</td>
-                          <td className={`px-4 py-3 text-right text-xl font-bold text-accent ${!hasRevenue ? "pr-6" : ""}`}>
+                          <td colSpan={hasDuration ? 6 : 5} className="pl-6 px-3 py-3 text-sm font-semibold text-ink-secondary">Tổng cộng</td>
+                          <td className={`px-3 py-3 text-right text-xl font-bold text-accent ${!hasRevenue ? "pr-6" : ""}`}>
                             {r.totalViewsEarned.toLocaleString("vi-VN")}
                           </td>
                           {hasRevenue && (
-                            <td className="px-4 pr-6 py-3 text-right text-base font-bold text-emerald-600">
+                            <td className="px-3 pr-6 py-3 text-right text-base font-bold text-emerald-600">
                               ${staffTotalRevenue(r).toFixed(2)}
                             </td>
                           )}

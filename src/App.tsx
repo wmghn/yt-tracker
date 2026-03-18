@@ -103,7 +103,7 @@ export default function App() {
 
       {/* Tab bar */}
       <div className="bg-surface-1 border-b border-border px-8">
-        <div className="flex max-w-5xl mx-auto">
+        <div className="flex max-w-7xl mx-auto">
           {/* Tab: Salary */}
           <button
             onClick={() => setTab("salary")}
@@ -179,7 +179,7 @@ export default function App() {
       </div>
 
       {/* Content */}
-      <main className="max-w-5xl mx-auto px-6 py-10 animate-in">
+      <main className="max-w-7xl mx-auto px-6 py-10 animate-in">
         {/* {tab === "transcript" && <TranscriptDownloader />} */}
         {tab === "match"  && <SheetMatcher />}
         {tab === "filter" && <StaffFilter />}
@@ -238,6 +238,7 @@ export default function App() {
                 {state.step === 3 && (
                   <ResultsTable
                     results={results}
+                    videos={state.videos}
                     weights={state.weights}
                     detectedOptional={state.detectedOptional}
                     onBack={() => patch({ step: 2 })}
