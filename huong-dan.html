@@ -1,0 +1,2028 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Hướng dẫn sử dụng — YT Tracker</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --ink:        #111827;
+      --ink-2:      #374151;
+      --ink-muted:  #6b7280;
+      --accent:     #6366f1;
+      --accent-bg:  #eef2ff;
+      --green:      #059669;
+      --green-bg:   #ecfdf5;
+      --amber:      #d97706;
+      --amber-bg:   #fffbeb;
+      --red:        #dc2626;
+      --red-bg:     #fef2f2;
+      --border:     #e5e7eb;
+      --surface:    #f9fafb;
+      --surface-2:  #f3f4f6;
+      --radius:     12px;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      color: var(--ink);
+      background: #fff;
+      line-height: 1.6;
+    }
+
+    /* ── Layout ── */
+    .layout { display: flex; min-height: 100vh; }
+
+    /* ── Sidebar ── */
+    .sidebar {
+      width: 260px;
+      flex-shrink: 0;
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      overflow-y: auto;
+      border-right: 1px solid var(--border);
+      background: var(--surface);
+      padding: 28px 0 40px;
+    }
+
+    .sidebar-logo {
+      padding: 0 20px 20px;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 16px;
+    }
+    .sidebar-logo h1 { font-size: 15px; font-weight: 700; color: var(--ink); }
+    .sidebar-logo p  { font-size: 12px; color: var(--ink-muted); margin-top: 2px; }
+
+    .nav-section {
+      padding: 6px 20px 4px;
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      color: var(--ink-muted);
+      margin-top: 8px;
+    }
+
+    .nav-item {
+      display: block;
+      padding: 7px 20px;
+      font-size: 13.5px;
+      color: var(--ink-2);
+      text-decoration: none;
+      border-left: 3px solid transparent;
+      transition: all .15s;
+    }
+    .nav-item:hover { background: var(--surface-2); color: var(--accent); }
+    .nav-item.active { border-left-color: var(--accent); color: var(--accent); font-weight: 600; background: var(--accent-bg); }
+
+    /* ── Main ── */
+    .main {
+      flex: 1;
+      min-width: 0;
+      max-width: 820px;
+      margin: 0 auto;
+      padding: 48px 40px 80px;
+    }
+
+    /* ── Section ── */
+    .section { margin-bottom: 64px; }
+
+    h2.section-title {
+      font-size: 22px;
+      font-weight: 800;
+      color: var(--ink);
+      border-bottom: 2px solid var(--border);
+      padding-bottom: 12px;
+      margin-bottom: 24px;
+    }
+
+    h3 {
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--ink);
+      margin: 28px 0 10px;
+    }
+
+    p { font-size: 14px; color: var(--ink-2); margin-bottom: 12px; }
+    p:last-child { margin-bottom: 0; }
+
+    /* ── Hero banner ── */
+    .hero {
+      background: var(--accent-bg);
+      border: 1px solid #c7d2fe;
+      border-radius: var(--radius);
+      padding: 28px 32px;
+      margin-bottom: 40px;
+    }
+    .hero h1 { font-size: 26px; font-weight: 800; color: var(--accent); margin-bottom: 6px; }
+    .hero p  { font-size: 14px; color: #4338ca; margin: 0; }
+
+    /* ── Step badge ── */
+    .steps { display: flex; flex-direction: column; gap: 16px; margin: 16px 0; }
+    .step {
+      display: flex;
+      gap: 16px;
+      align-items: flex-start;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px 18px;
+    }
+    .step-num {
+      width: 28px; height: 28px;
+      border-radius: 50%;
+      background: var(--accent);
+      color: #fff;
+      font-size: 13px;
+      font-weight: 700;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+      margin-top: 1px;
+    }
+    .step-body { flex: 1; min-width: 0; }
+    .step-body strong { display: block; font-size: 14px; color: var(--ink); margin-bottom: 4px; }
+    .step-body p { font-size: 13px; margin: 0; }
+
+    /* ── Table ── */
+    .table-wrap { overflow-x: auto; margin: 14px 0; border-radius: var(--radius); border: 1px solid var(--border); }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    thead tr { background: var(--surface-2); }
+    th {
+      padding: 10px 14px;
+      text-align: left;
+      font-weight: 700;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: .04em;
+      color: var(--ink-muted);
+      border-bottom: 1px solid var(--border);
+      white-space: nowrap;
+    }
+    td {
+      padding: 9px 14px;
+      border-bottom: 1px solid var(--border);
+      color: var(--ink-2);
+      vertical-align: top;
+    }
+    tr:last-child td { border-bottom: none; }
+    tbody tr:hover { background: var(--surface); }
+    td code, th code {
+      font-family: "SF Mono", Menlo, monospace;
+      font-size: 12px;
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1px 5px;
+    }
+    .required { color: var(--red); font-weight: 700; font-size: 11px; }
+    .optional { color: var(--ink-muted); font-size: 11px; }
+
+    /* ── Sheet preview ── */
+    .sheet-preview {
+      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      margin: 14px 0;
+      font-size: 12px;
+      font-family: "SF Mono", Menlo, monospace;
+    }
+    .sheet-header {
+      display: flex;
+      background: #f1f5f9;
+      border-bottom: 1px solid var(--border);
+      font-weight: 700;
+      font-size: 11px;
+      color: #475569;
+    }
+    .sheet-row { display: flex; border-bottom: 1px solid #f1f5f9; }
+    .sheet-row:last-child { border-bottom: none; }
+    .sheet-row.header-row { background: #eff6ff; font-weight: 700; color: #1e40af; }
+    .cell {
+      padding: 6px 10px;
+      border-right: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    .cell:last-child { border-right: none; flex: 1; }
+    .cell.col-rownum { width: 36px; color: var(--ink-muted); text-align: right; font-size: 10px; background: var(--surface-2); }
+    .cell.col-a { width: 90px; }
+    .cell.col-b { width: 200px; }
+    .cell.col-c { width: 110px; }
+    .cell.col-d { width: 80px; }
+    .cell.col-e { }
+    .cell.highlight { background: #fef9c3; }
+    .cell.highlight-blue { background: #eff6ff; }
+    .cell.required-col { background: #fef2f2; }
+
+    /* ── Callout ── */
+    .callout {
+      border-radius: var(--radius);
+      padding: 14px 16px;
+      margin: 14px 0;
+      font-size: 13px;
+      display: flex;
+      gap: 10px;
+      align-items: flex-start;
+    }
+    .callout-icon { font-size: 16px; flex-shrink: 0; margin-top: 1px; }
+    .callout-body { flex: 1; min-width: 0; }
+    .callout-body strong { display: block; margin-bottom: 3px; }
+    .callout.info    { background: var(--accent-bg); border: 1px solid #c7d2fe; color: #3730a3; }
+    .callout.success { background: var(--green-bg);  border: 1px solid #a7f3d0; color: #065f46; }
+    .callout.warning { background: var(--amber-bg);  border: 1px solid #fde68a; color: #78350f; }
+    .callout.danger  { background: var(--red-bg);    border: 1px solid #fecaca; color: #991b1b; }
+
+    /* ── Badge ── */
+    .badge {
+      display: inline-block;
+      font-size: 11px;
+      font-weight: 600;
+      border-radius: 999px;
+      padding: 2px 8px;
+      border: 1px solid;
+    }
+    .badge.blue   { background: var(--accent-bg); color: var(--accent); border-color: #c7d2fe; }
+    .badge.green  { background: var(--green-bg);  color: var(--green);  border-color: #a7f3d0; }
+    .badge.gray   { background: var(--surface-2); color: var(--ink-muted); border-color: var(--border); }
+    .badge.red    { background: var(--red-bg);    color: var(--red);    border-color: #fecaca; }
+
+    /* ── Code block ── */
+    pre {
+      background: #1e293b;
+      color: #e2e8f0;
+      border-radius: var(--radius);
+      padding: 16px 18px;
+      font-size: 12.5px;
+      font-family: "SF Mono", Menlo, monospace;
+      overflow-x: auto;
+      margin: 12px 0;
+      line-height: 1.7;
+    }
+    pre .c { color: #94a3b8; }
+    pre .k { color: #93c5fd; }
+    pre .s { color: #86efac; }
+
+    /* ── Inline code ── */
+    code {
+      font-family: "SF Mono", Menlo, monospace;
+      font-size: 12px;
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1px 5px;
+      color: var(--accent);
+    }
+
+    /* ── Screenshot placeholder ── */
+    .screenshot {
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      margin: 14px 0;
+    }
+    .screenshot-bar {
+      background: var(--surface-2);
+      border-bottom: 1px solid var(--border);
+      padding: 8px 14px;
+      font-size: 11px;
+      color: var(--ink-muted);
+      font-weight: 600;
+    }
+    .screenshot-body {
+      padding: 20px;
+      background: var(--surface);
+      font-size: 13px;
+    }
+
+    /* ── UI mock ── */
+    .ui-mock {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px 18px;
+      margin: 12px 0;
+    }
+    .ui-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 9px 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .ui-row:last-child { border-bottom: none; }
+    .ui-checkbox {
+      width: 18px; height: 18px;
+      border: 2px solid var(--accent);
+      border-radius: 5px;
+      background: var(--accent);
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+    }
+    .ui-checkbox span { color: #fff; font-size: 10px; font-weight: 700; }
+    .ui-name { flex: 1; font-size: 13px; font-weight: 600; color: var(--ink); }
+    .ui-count { font-size: 12px; color: var(--ink-muted); background: var(--surface-2); border: 1px solid var(--border); border-radius: 999px; padding: 1px 8px; }
+    .ui-btn { font-size: 11px; font-weight: 600; color: var(--ink-2); border: 1px solid var(--border); border-radius: 8px; padding: 4px 10px; background: #fff; cursor: default; }
+    .ui-btn.copy { color: var(--green); border-color: #a7f3d0; background: var(--green-bg); }
+    .ui-role { font-size: 11px; font-weight: 600; border-radius: 999px; padding: 2px 8px; border: 1px solid; }
+    .ui-role.editor  { background: #eff6ff; color: #1d4ed8; border-color: #bfdbfe; }
+    .ui-role.content { background: #f5f3ff; color: #6d28d9; border-color: #ddd6fe; }
+
+    ul, ol { padding-left: 20px; margin: 8px 0 12px; }
+    li { font-size: 14px; color: var(--ink-2); margin-bottom: 4px; }
+
+    @media (max-width: 768px) {
+      .sidebar { display: none; }
+      .main { padding: 24px 20px 60px; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="layout">
+
+  <!-- ── Sidebar ── -->
+  <nav class="sidebar">
+    <div class="sidebar-logo">
+      <h1>📊 YT Tracker</h1>
+      <p>Hướng dẫn sử dụng</p>
+    </div>
+
+    <div class="nav-section">Tổng quan</div>
+    <a class="nav-item" href="#gioi-thieu">Giới thiệu</a>
+
+    <div class="nav-section">Tính Views</div>
+    <a class="nav-item" href="#vt-gioi-thieu">Giới thiệu</a>
+    <a class="nav-item" href="#vt-file-yeu-cau">Yêu cầu file</a>
+    <a class="nav-item" href="#vt-kenh">Tạo &amp; quản lý kênh</a>
+    <a class="nav-item" href="#vt-buoc1">Bước 1 — Upload file</a>
+    <a class="nav-item" href="#vt-buoc2">Bước 2 — Thiết lập nhân sự</a>
+    <a class="nav-item" href="#vt-buoc3">Bước 3 — Kết quả &amp; lưu tháng</a>
+    <a class="nav-item" href="#vt-lich-su">Lịch sử tháng</a>
+    <a class="nav-item" href="#vt-analytics">Analytics</a>
+    <a class="nav-item" href="#vt-luu-y">Lưu ý &amp; Lỗi thường gặp</a>
+
+    <div class="nav-section">Lọc Video ID</div>
+    <a class="nav-item active" href="#loc-video-id">Tính năng Lọc Video ID</a>
+    <a class="nav-item" href="#dinh-dang-sheet">Định dạng sheet mẫu</a>
+    <a class="nav-item" href="#ten-cot">Tên cột hợp lệ</a>
+    <a class="nav-item" href="#cach-dung">Cách sử dụng</a>
+    <a class="nav-item" href="#vai-tro">Gán vai trò nhân sự</a>
+    <a class="nav-item" href="#export">Export Excel</a>
+    <a class="nav-item" href="#luu-y">Lưu ý & Lỗi thường gặp</a>
+
+    <div class="nav-section">Tìm My Video ID</div>
+    <a class="nav-item" href="#tim-video-id">Giới thiệu tính năng</a>
+    <a class="nav-item" href="#tim-dinh-dang-sheet">Định dạng sheet mẫu</a>
+    <a class="nav-item" href="#tim-cach-dung">Cách sử dụng</a>
+    <a class="nav-item" href="#tim-ket-qua-khop">Các kết quả khớp</a>
+    <a class="nav-item" href="#tim-export">Kết quả đầu ra</a>
+    <a class="nav-item" href="#tim-luu-y">Lưu ý & Lỗi thường gặp</a>
+  </nav>
+
+  <!-- ── Main ── -->
+  <main class="main">
+
+    <div class="hero">
+      <h1>Hướng dẫn sử dụng YT Tracker</h1>
+      <p>Công cụ giúp cả team nhìn thấy đóng góp của mình qua từng tháng — minh bạch, dễ hiểu, và dùng để cùng nhau cải thiện.</p>
+    </div>
+
+    <!-- ════════════════════════════════════════════════════════════════
+         TÍNH VIEWS
+    ═══════════════════════════════════════════════════════════════════ -->
+
+    <!-- ── Giới thiệu Tính Views ── -->
+    <section class="section" id="vt-gioi-thieu">
+      <h2 class="section-title">Tính Views — Giới thiệu</h2>
+
+      <p>
+        Tab <strong>📊 Tính views</strong> là tính năng trung tâm của YT Tracker. Nó trả lời câu hỏi:
+        <em>"Tháng này mình đã đóng góp bao nhiêu lượt xem cho kênh?"</em>
+      </p>
+      <p>
+        Vì một video thường do nhiều người cùng làm (editor, content creator…), views không thể chia đều đơn giản.
+        App dùng hệ thống <strong>tỷ trọng theo vai trò</strong>: mỗi vai trò được ghi nhận một phần views tương ứng,
+        rồi chia đều cho những người cùng đóng góp trong vai trò đó.
+      </p>
+
+      <div class="callout info">
+        <div class="callout-icon">💡</div>
+        <div class="callout-body">
+          <strong>Luồng hoạt động chính</strong><br/>
+          Tạo kênh → Upload file YouTube Analytics → Thêm Video ID của mình →
+          Xem đóng góp được ghi nhận → Lưu tháng → Theo dõi xu hướng nhiều tháng.
+        </div>
+      </div>
+
+      <h3>Cấu trúc giao diện</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Sub-tab</th><th>Mô tả</th></tr></thead>
+          <tbody>
+            <tr><td><strong>📊 Tính views</strong></td><td>Luồng 3 bước: Upload → Nhân sự → Kết quả</td></tr>
+            <tr><td><strong>📅 Lịch sử</strong></td><td>Danh sách các tháng đã lưu — xem lại, đổi tên, xóa, sắp xếp thứ tự</td></tr>
+            <tr><td><strong>📈 Analytics</strong></td><td>Xem xu hướng đóng góp qua nhiều tháng — mở khóa khi có ≥ 2 tháng đã lưu</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ── Yêu cầu file ── -->
+    <section class="section" id="vt-file-yeu-cau">
+      <h2 class="section-title">Yêu cầu file YouTube Analytics</h2>
+
+      <p>
+        App đọc file export trực tiếp từ <strong>YouTube Studio → Analytics → Content</strong>.
+        Không cần chỉnh sửa gì — tải về rồi upload thẳng.
+      </p>
+
+      <h3>Cách lấy file từ YouTube Studio</h3>
+      <div class="steps">
+        <div class="step">
+          <div class="step-num">1</div>
+          <div class="step-body">
+            <strong>Mở YouTube Studio</strong>
+            <p>Truy cập <strong>studio.youtube.com</strong> → chọn tab <strong>Analytics</strong> trên thanh bên trái.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">2</div>
+          <div class="step-body">
+            <strong>Chọn tab Content</strong>
+            <p>Trong trang Analytics, bấm vào tab <strong>Content</strong> (Nội dung) để xem báo cáo theo video.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">3</div>
+          <div class="step-body">
+            <strong>Chọn khoảng thời gian</strong>
+            <p>Lọc theo tháng cần phân tích (ví dụ: tháng 2/2026). Khoảng thời gian càng chính xác, dữ liệu càng đúng.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">4</div>
+          <div class="step-body">
+            <strong>Xuất dữ liệu</strong>
+            <p>Bấm biểu tượng <strong>↓ Xuất</strong> (Export) ở góc trên bên phải → chọn <em>Bảng tính Google Sheets</em> hoặc <em>Excel (.xlsx)</em>.</p>
+          </div>
+        </div>
+      </div>
+
+      <h3>Cấu trúc file export</h3>
+      <p>File có cấu trúc cố định — app tự nhận diện và bỏ qua hàng tổng:</p>
+
+      <div class="sheet-preview">
+        <div class="sheet-header">
+          <div class="cell col-rownum">#</div>
+          <div class="cell" style="flex:1.5">Nội dung (Video ID)</div>
+          <div class="cell" style="flex:2.5">Tiêu đề video</div>
+          <div class="cell" style="flex:1">Số lượt xem</div>
+          <div class="cell" style="flex:1.2">Thời gian xem (giờ)</div>
+        </div>
+        <div class="sheet-row header-row">
+          <div class="cell col-rownum">1</div>
+          <div class="cell highlight-blue" style="flex:1.5">Nội dung</div>
+          <div class="cell highlight-blue" style="flex:2.5">Tiêu đề video</div>
+          <div class="cell highlight-blue" style="flex:1">Số lượt xem</div>
+          <div class="cell" style="flex:1.2">Thời gian xem (giờ)</div>
+        </div>
+        <div class="sheet-row" style="background:#fafafa;color:#9ca3af;font-style:italic">
+          <div class="cell col-rownum">2</div>
+          <div class="cell" style="flex:1.5">← hàng "Tổng" — bỏ qua</div>
+          <div class="cell" style="flex:2.5"></div>
+          <div class="cell" style="flex:1">1,234,567</div>
+          <div class="cell" style="flex:1.2">98,432</div>
+        </div>
+        <div class="sheet-row">
+          <div class="cell col-rownum">3</div>
+          <div class="cell highlight" style="flex:1.5"><code>GI1b9_k-tN4</code></div>
+          <div class="cell" style="flex:2.5">20 bí ẩn về vũ trụ chưa có lời giải</div>
+          <div class="cell" style="flex:1">91,652</div>
+          <div class="cell" style="flex:1.2">3,420</div>
+        </div>
+        <div class="sheet-row">
+          <div class="cell col-rownum">4</div>
+          <div class="cell highlight" style="flex:1.5"><code>XI0hV24RLEQ</code></div>
+          <div class="cell" style="flex:2.5">Top 10 loài động vật nguy hiểm nhất</div>
+          <div class="cell" style="flex:1">54,821</div>
+          <div class="cell" style="flex:1.2">1,980</div>
+        </div>
+      </div>
+
+      <h3>Các cột được nhận diện</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Cột</th><th>Mức độ</th><th>Tên cột trong file</th><th>Dùng để</th></tr></thead>
+          <tbody>
+            <tr>
+              <td>Video ID</td>
+              <td><span class="badge red">Bắt buộc</span></td>
+              <td><code>Nội dung</code></td>
+              <td>Nhận diện từng video (11 ký tự)</td>
+            </tr>
+            <tr>
+              <td>Tiêu đề</td>
+              <td><span class="badge red">Bắt buộc</span></td>
+              <td><code>Tiêu đề video</code></td>
+              <td>Hiển thị tên video trong kết quả</td>
+            </tr>
+            <tr>
+              <td>Lượt xem</td>
+              <td><span class="badge red">Bắt buộc</span></td>
+              <td><code>Số lượt xem</code></td>
+              <td>Cơ sở tính toán phân bổ views</td>
+            </tr>
+            <tr>
+              <td>Watch time</td>
+              <td><span class="optional">Tùy chọn</span></td>
+              <td><code>Thời gian xem (giờ)</code></td>
+              <td>Hiển thị trong kết quả và Analytics</td>
+            </tr>
+            <tr>
+              <td>Thời lượng</td>
+              <td><span class="optional">Tùy chọn</span></td>
+              <td><code>Thời lượng</code></td>
+              <td>Hiển thị trong kết quả</td>
+            </tr>
+            <tr>
+              <td>Subscribers</td>
+              <td><span class="optional">Tùy chọn</span></td>
+              <td><code>Số người đăng ký</code></td>
+              <td>Hiển thị trong Analytics</td>
+            </tr>
+            <tr>
+              <td>Doanh thu</td>
+              <td><span class="optional">Tùy chọn</span></td>
+              <td><code>Doanh thu ước tính (USD)</code></td>
+              <td>Phân bổ doanh thu theo vai trò, hiển thị trong Analytics</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="callout" style="border-color:#fcd34d; background:#fffbeb;">
+        <div class="callout-icon" style="color:#d97706;">⚠️</div>
+        <div class="callout-body">
+          Nếu thiếu 1 trong 3 cột bắt buộc, app sẽ báo lỗi và chỉ rõ cột nào bị thiếu.
+          Điều này thường xảy ra khi export sai tab (chọn Reach thay vì Content).
+        </div>
+      </div>
+    </section>
+
+    <!-- ── Tạo & quản lý kênh ── -->
+    <section class="section" id="vt-kenh">
+      <h2 class="section-title">Tạo &amp; quản lý kênh</h2>
+
+      <p>
+        Mỗi <strong>kênh</strong> là một không gian lưu trữ riêng biệt — dữ liệu của các kênh
+        hoàn toàn tách biệt nhau. Nếu team bạn quản lý nhiều kênh YouTube, tạo một kênh cho mỗi
+        kênh YouTube giúp tránh nhầm lẫn dữ liệu.
+      </p>
+
+      <h3>Tạo kênh mới</h3>
+      <div class="steps">
+        <div class="step">
+          <div class="step-num">1</div>
+          <div class="step-body">
+            <strong>Mở menu kênh</strong>
+            <p>Bấm vào nút <strong>📺 [Tên kênh] ▾</strong> ở góc trên bên trái thanh điều hướng.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">2</div>
+          <div class="step-body">
+            <strong>Nhập tên và tạo</strong>
+            <p>Gõ tên kênh vào ô <em>"Tên kênh..."</em> ở cuối dropdown → bấm <strong>Tạo</strong> hoặc nhấn Enter.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">3</div>
+          <div class="step-body">
+            <strong>Chuyển đổi giữa các kênh</strong>
+            <p>Bấm vào tên kênh trong danh sách để chuyển sang kênh đó. Dấu chấm xanh chỉ kênh đang active.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="callout info">
+        <div class="callout-icon">ℹ️</div>
+        <div class="callout-body">
+          <strong>Kênh mặc định</strong><br/>
+          Lần đầu mở app, một kênh tên "Kênh mặc định" được tự tạo.
+          Bạn có thể đổi tên bằng cách hover vào tên kênh và bấm biểu tượng ✏️.
+        </div>
+      </div>
+
+      <div class="callout" style="border-color:#fca5a5; background:#fff1f2;">
+        <div class="callout-icon" style="color:#b91c1c;">⚠️</div>
+        <div class="callout-body">
+          <strong>Xóa kênh sẽ xóa toàn bộ lịch sử tháng của kênh đó</strong> và không thể hoàn tác.
+          Không thể xóa kênh duy nhất còn lại (phải có ít nhất 1 kênh).
+        </div>
+      </div>
+    </section>
+
+    <!-- ── Bước 1 ── -->
+    <section class="section" id="vt-buoc1">
+      <h2 class="section-title">Bước 1 — Upload file YouTube Analytics</h2>
+
+      <p>
+        Sau khi chọn đúng kênh, bắt đầu bằng việc upload file export tháng cần phân tích.
+      </p>
+
+      <div class="steps">
+        <div class="step">
+          <div class="step-num">1</div>
+          <div class="step-body">
+            <strong>Kéo thả hoặc bấm chọn file</strong>
+            <p>Kéo file <code>.xlsx</code> / <code>.csv</code> vào vùng upload, hoặc bấm vào vùng đó để mở hộp thoại chọn file.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">2</div>
+          <div class="step-body">
+            <strong>Kiểm tra kết quả đọc file</strong>
+            <p>
+              App hiển thị báo cáo cột ngay sau khi đọc xong:
+              cột bắt buộc nào được tìm thấy, cột tùy chọn nào được phát hiện,
+              và bao nhiêu video được đọc từ hàng 3 trở đi.
+            </p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">3</div>
+          <div class="step-body">
+            <strong>Bấm "Tiếp tục" để sang Bước 2</strong>
+            <p>Nút chỉ xuất hiện khi file hợp lệ. Nếu có lỗi, app chỉ rõ cột nào thiếu.</p>
+          </div>
+        </div>
+      </div>
+
+      <h3>Báo cáo cột sau khi upload</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Trạng thái</th><th>Ý nghĩa</th></tr></thead>
+          <tbody>
+            <tr>
+              <td><span style="color:#059669;font-weight:700">✓ xanh</span></td>
+              <td>Cột bắt buộc tìm thấy — upload thành công</td>
+            </tr>
+            <tr>
+              <td><span style="color:#059669;font-weight:700">✓ xanh (nhạt)</span></td>
+              <td>Cột tùy chọn được phát hiện — sẽ xuất hiện trong kết quả và export</td>
+            </tr>
+            <tr>
+              <td><span style="color:#dc2626;font-weight:700">✗ đỏ</span></td>
+              <td>Cột bắt buộc bị thiếu — upload thất bại, cần kiểm tra file</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ── Bước 2 ── -->
+    <section class="section" id="vt-buoc2">
+      <h2 class="section-title">Bước 2 — Thiết lập nhân sự</h2>
+
+      <p>
+        Ở bước này, mỗi thành viên trong team được thêm vào cùng với vai trò và danh sách
+        Video ID của những video mình đã tham gia làm trong tháng.
+      </p>
+
+      <h3>Tỷ trọng vai trò</h3>
+      <p>
+        Phần đầu trang có thanh cấu hình tỷ trọng — thể hiện mức đóng góp tương đối của mỗi vai trò
+        trong quá trình làm ra một video. Tổng luôn bằng 100%.
+      </p>
+
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Vai trò</th><th>Mặc định</th><th>Ý nghĩa</th></tr></thead>
+          <tbody>
+            <tr>
+              <td><span class="ui-role editor">Editor</span></td>
+              <td>60%</td>
+              <td>Người dựng/edit video — được ghi nhận 60% views của video đó</td>
+            </tr>
+            <tr>
+              <td><span class="ui-role content">Content</span></td>
+              <td>40%</td>
+              <td>Người viết kịch bản/nội dung — được ghi nhận 40% views còn lại</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="callout info">
+        <div class="callout-icon">📐</div>
+        <div class="callout-body">
+          <strong>Công thức ghi nhận đóng góp</strong><br/>
+          <code>Views đóng góp = Tổng views × Tỷ trọng vai trò ÷ Số người cùng vai trò trên video đó</code><br/><br/>
+          Ví dụ: Video 91,652 views · Editor 60% · 2 editors cùng làm:<br/>
+          <code>91,652 × 60% = 54,991 ÷ 2 = 27,496 views mỗi editor</code>
+        </div>
+      </div>
+
+      <h3>Thêm nhân sự</h3>
+      <div class="steps">
+        <div class="step">
+          <div class="step-num">1</div>
+          <div class="step-body">
+            <strong>Bấm "Thêm nhân sự"</strong>
+            <p>Một thẻ nhân sự mới xuất hiện ở dạng form chỉnh sửa.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">2</div>
+          <div class="step-body">
+            <strong>Điền tên và chọn vai trò</strong>
+            <p>Tên nhân sự là bắt buộc. Chọn vai trò Editor hoặc Content — tỷ lệ % hiện thị ngay trên nút.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">3</div>
+          <div class="step-body">
+            <strong>Nhập danh sách Video ID</strong>
+            <p>
+              Dán danh sách Video ID vào ô textarea — <strong>mỗi ID một dòng</strong>.
+              Có thể dùng nút <em>+ Upload .txt</em> để tải file text chứa sẵn danh sách.
+            </p>
+            <div class="callout success" style="margin-top:10px">
+              <div class="callout-icon">✅</div>
+              <div class="callout-body">
+                App phản hồi ngay: <strong>xanh</strong> = khớp với file upload,
+                <strong>vàng</strong> = ID hợp lệ nhưng không có trong file,
+                <strong>đỏ</strong> = sai định dạng (không phải 11 ký tự).
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">4</div>
+          <div class="step-body">
+            <strong>Bấm "Thêm nhân sự" để lưu thẻ</strong>
+            <p>Thẻ chuyển về dạng xem với tóm tắt: số video khớp, vai trò, danh sách ID thu gọn.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="callout info">
+        <div class="callout-icon">💡</div>
+        <div class="callout-body">
+          <strong>Lấy Video ID nhanh từ đâu?</strong><br/>
+          Dùng tính năng <strong>🔍 Lọc Video ID</strong> để tự động trích xuất danh sách ID
+          theo từng nhân sự từ file Google Sheet quản lý nội dung. Sau đó dán thẳng vào đây.
+        </div>
+      </div>
+
+      <h3>Sau khi thêm đủ nhân sự</h3>
+      <p>Bấm <strong>"Xem kết quả"</strong> ở cuối trang để chuyển sang Bước 3.</p>
+    </section>
+
+    <!-- ── Bước 3 ── -->
+    <section class="section" id="vt-buoc3">
+      <h2 class="section-title">Bước 3 — Xem kết quả &amp; lưu tháng</h2>
+
+      <p>
+        Bước 3 hiển thị tổng hợp đóng góp của từng thành viên trong tháng, sắp xếp theo views từ cao đến thấp.
+      </p>
+
+      <h3>Bảng đóng góp tổng hợp</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Cột</th><th>Nội dung</th></tr></thead>
+          <tbody>
+            <tr><td>Tên</td><td>Tên + vai trò (Editor / Content)</td></tr>
+            <tr><td>Số video</td><td>Số video mình đã tham gia làm trong tháng này</td></tr>
+            <tr><td>Tổng views đóng góp</td><td>Tổng views được ghi nhận sau khi quy đổi theo tỷ trọng vai trò</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Xem chi tiết từng video</h3>
+      <p>
+        Bấm vào tên mình trong bảng để xem chi tiết từng video đã làm:
+        tiêu đề, tổng views gốc của video, tỷ trọng vai trò, số người cùng làm,
+        views được ghi nhận cho mình, và công thức tính cụ thể.
+      </p>
+
+      <h3>Video chưa có người đăng ký</h3>
+      <p>
+        Nếu có video trong file nhưng chưa có ai điền Video ID đó vào danh sách của mình,
+        chúng xuất hiện trong block <strong>⚠️ Video chưa được track</strong> ở đầu trang.
+        Đây là cơ hội để bổ sung — những video này chưa được ghi nhận cho ai cả.
+      </p>
+
+      <h3>Export Excel</h3>
+      <p>
+        Bấm <strong>Export Excel</strong> để tải file với 2 sheet:
+        <em>Summary</em> (tóm tắt mỗi nhân sự) và <em>Detail</em> (mỗi video từng người).
+        Trước khi tải, app cho chọn cột tùy chọn nào muốn đưa vào file.
+      </p>
+
+      <h3>Lưu tháng vào lịch sử</h3>
+      <div class="steps">
+        <div class="step">
+          <div class="step-num">1</div>
+          <div class="step-body">
+            <strong>Bấm "Lưu tháng này"</strong>
+            <p>Nút xuất hiện ở đầu Bước 3, bên cạnh nút Export.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">2</div>
+          <div class="step-body">
+            <strong>Đặt tên cho tháng</strong>
+            <p>
+              Ví dụ: <em>"Tháng 2/2026"</em> hoặc <em>"Feb 2026"</em>.
+              App tự nhận diện tháng/năm từ tên để hiển thị badge trên lịch sử.
+            </p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">3</div>
+          <div class="step-body">
+            <strong>Bấm "Lưu"</strong>
+            <p>
+              Dữ liệu tháng (videos, nhân sự, tỷ trọng) được lưu vào lịch sử của kênh đang active.
+              App tự chuyển sang tab <strong>Lịch sử</strong>.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div class="callout success">
+        <div class="callout-icon">✅</div>
+        <div class="callout-body">
+          Lưu cùng tên tháng hai lần sẽ <strong>ghi đè</strong> dữ liệu cũ — dữ liệu lịch sử không bị nhân đôi.
+        </div>
+      </div>
+    </section>
+
+    <!-- ── Lịch sử tháng ── -->
+    <section class="section" id="vt-lich-su">
+      <h2 class="section-title">Lịch sử tháng</h2>
+
+      <p>
+        Tab <strong>📅 Lịch sử</strong> liệt kê tất cả các tháng đã lưu cho kênh đang active,
+        từ mới nhất đến cũ nhất.
+      </p>
+
+      <h3>Các thao tác trên lịch sử</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Thao tác</th><th>Cách thực hiện</th><th>Ghi chú</th></tr></thead>
+          <tbody>
+            <tr>
+              <td><strong>Xem lại kết quả</strong></td>
+              <td>Hover vào tháng → bấm nút <strong>Xem</strong> xuất hiện bên phải</td>
+              <td>Tải lại toàn bộ dữ liệu tháng đó vào Bước 3</td>
+            </tr>
+            <tr>
+              <td><strong>Đổi tên</strong></td>
+              <td>Hover → bấm biểu tượng ✏️</td>
+              <td>Tên ảnh hưởng đến badge tháng/năm hiển thị trên lịch sử</td>
+            </tr>
+            <tr>
+              <td><strong>Xóa</strong></td>
+              <td>Hover → bấm biểu tượng 🗑️</td>
+              <td>Yêu cầu xác nhận — không thể hoàn tác</td>
+            </tr>
+            <tr>
+              <td><strong>Sắp xếp thứ tự</strong></td>
+              <td>Bấm nút ▲ / ▼ ở đầu mỗi hàng</td>
+              <td>Thứ tự trong danh sách = thứ tự trên biểu đồ Analytics (mới nhất ở trên = phải nhất)</td>
+            </tr>
+            <tr>
+              <td><strong>Upload tháng mới</strong></td>
+              <td>Bấm nút <strong>"+ Upload tháng mới"</strong> ở góc trên phải</td>
+              <td>Quay lại Bước 1 để bắt đầu nhập liệu tháng tiếp theo</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="callout info">
+        <div class="callout-icon">💡</div>
+        <div class="callout-body">
+          Khi chỉ có <strong>1 tháng</strong>, app gợi ý lưu thêm 1 tháng nữa để mở khóa tab Analytics.
+          Analytics cần tối thiểu 2 tháng dữ liệu để có xu hướng có ý nghĩa.
+        </div>
+      </div>
+    </section>
+
+    <!-- ── Analytics ── -->
+    <section class="section" id="vt-analytics">
+      <h2 class="section-title">Analytics — Xem xu hướng &amp; đóng góp của team</h2>
+
+      <p>
+        Tab <strong>📈 Analytics</strong> mở khóa khi đã có <strong>ít nhất 2 tháng</strong> dữ liệu.
+        Đây là nơi để cả team cùng quan sát: mình đang phát triển thế nào qua từng tháng,
+        mình đóng góp bao nhiêu phần trăm trong nhóm, và những video nào đang mang lại nhiều giá trị nhất.
+      </p>
+
+      <p>
+        Góc trên phải có bộ chọn <strong>Tháng</strong> (dropdown) để lọc dữ liệu của một tháng cụ thể
+        trong các tab Tổng quan, Theo vai trò, và Xếp hạng.
+      </p>
+
+      <h3>Các sub-tab trong Analytics</h3>
+
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Sub-tab</th><th>Nội dung chính</th></tr></thead>
+          <tbody>
+            <tr>
+              <td><strong>🏆 Tổng quan</strong></td>
+              <td>
+                Tổng hợp tháng đang chọn: số thành viên, video, tổng views, doanh thu.
+                Bảng đóng góp của từng người trong nhóm vai trò — views, watch time, doanh thu.
+              </td>
+            </tr>
+            <tr>
+              <td><strong>👥 Theo vai trò</strong></td>
+              <td>
+                Nhìn thấy đóng góp của mình trong nhóm <em>cùng vai trò</em>.
+                Tỷ lệ đóng góp (%), bar chart trực quan, và thứ hạng trong nhóm.
+              </td>
+            </tr>
+            <tr>
+              <td><strong>📊 Xếp hạng</strong></td>
+              <td>
+                Top 10 video nổi bật nhất tháng, danh sách đóng góp theo views / watch time / doanh thu.
+                Doanh thu và subscriber ẩn nếu file không có dữ liệu.
+              </td>
+            </tr>
+            <tr>
+              <td><strong>📈 Xu hướng</strong></td>
+              <td>
+                Biểu đồ đường thể hiện sự phát triển của từng người qua nhiều tháng.
+                Biểu đồ tròn cho thấy tỷ lệ đóng góp mỗi tháng (chọn nhiều tháng cùng lúc).
+                Thẻ tóm tắt xu hướng: đang tăng / ổn định / cần cải thiện.
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Biểu đồ đường — Xu hướng theo thời gian</h3>
+      <ul>
+        <li>Mỗi người là một đường màu khác nhau — dễ nhìn thấy mình đang ở đâu trong bức tranh chung.</li>
+        <li>Bấm vào tên trong <strong>bảng màu</strong> để ẩn/hiện đường của người đó — tiện khi có nhiều thành viên.</li>
+        <li>Hover vào điểm dữ liệu để xem chi tiết: tên, tháng, views đóng góp tháng đó.</li>
+      </ul>
+
+      <h3>Biểu đồ tròn — Tỷ lệ đóng góp theo tháng</h3>
+      <ul>
+        <li>Mặc định hiển thị tháng gần nhất. Bấm vào chip tháng để xem thêm các tháng khác.</li>
+        <li>Bấm <strong>"Tất cả"</strong> để so sánh toàn bộ, <strong>"Gần nhất"</strong> để về tháng cuối.</li>
+        <li>Khi chọn nhiều tháng, các biểu đồ xếp cạnh nhau — dễ thấy sự thay đổi theo thời gian.</li>
+        <li>Mỗi lát hiển thị tên, phần trăm đóng góp và số views cụ thể.</li>
+      </ul>
+
+      <h3>Video chưa có người nhận</h3>
+      <p>
+        Block <strong>⚠️ Video chưa được track</strong> ở đầu trang liệt kê các video trong tháng
+        chưa có ai điền Video ID vào. Đây là cơ hội để bổ sung — bấm mở để xem danh sách và số views đang bị bỏ sót.
+      </p>
+
+      <h3>Hệ thống badge tỷ lệ / tổng</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Badge</th><th>Màu</th><th>Áp dụng cho</th></tr></thead>
+          <tbody>
+            <tr>
+              <td><span style="font-size:11px;font-weight:600;padding:2px 7px;border-radius:999px;background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe">tỷ lệ</span></td>
+              <td>Xanh dương</td>
+              <td>Views và Doanh thu — đã quy đổi theo tỷ trọng vai trò ÷ số người cùng vai trò</td>
+            </tr>
+            <tr>
+              <td><span style="font-size:11px;font-weight:600;padding:2px 7px;border-radius:999px;background:#f1f5f9;color:#475569;border:1px solid #cbd5e1">tổng</span></td>
+              <td>Xám</td>
+              <td>Số video, Watch time, Lượt đăng ký — tổng thô không quy đổi</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ── Lưu ý Tính Views ── -->
+    <section class="section" id="vt-luu-y">
+      <h2 class="section-title">Lưu ý &amp; Lỗi thường gặp — Tính Views</h2>
+
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Lỗi / Tình huống</th><th>Nguyên nhân</th><th>Cách khắc phục</th></tr></thead>
+          <tbody>
+            <tr>
+              <td>Upload thất bại — thiếu cột</td>
+              <td>File không phải export từ tab Content của YouTube Studio</td>
+              <td>Vào Analytics → Content → chọn lại khoảng thời gian → bấm Xuất</td>
+            </tr>
+            <tr>
+              <td>Video ID "vàng" (không tìm thấy trong file)</td>
+              <td>ID hợp lệ nhưng video không có trong file upload tháng này</td>
+              <td>Bình thường nếu video đó đăng tháng khác. Kiểm tra lại nếu bất thường</td>
+            </tr>
+            <tr>
+              <td>Views đóng góp = 0</td>
+              <td>Đã thêm tên nhưng chưa có Video ID nào khớp với file tháng này</td>
+              <td>Kiểm tra lại Video ID đã dán — có thể thiếu hoặc sai ký tự</td>
+            </tr>
+            <tr>
+              <td>Tab Analytics bị xám / không bấm được</td>
+              <td>Chưa đủ 2 tháng dữ liệu trong lịch sử của kênh đang chọn</td>
+              <td>Upload và lưu thêm 1 tháng nữa. Nhớ chọn đúng kênh trước khi lưu</td>
+            </tr>
+            <tr>
+              <td>Dữ liệu mất sau khi reload trang</td>
+              <td>Trình duyệt xóa localStorage (chế độ ẩn danh, xóa cache)</td>
+              <td>Dùng cửa sổ thông thường. Lưu tháng vào lịch sử trước khi đóng trang</td>
+            </tr>
+            <tr>
+              <td>Cột Doanh thu không hiển thị trong kết quả</td>
+              <td>File upload không có cột "Doanh thu ước tính (USD)"</td>
+              <td>Bình thường với kênh chưa bật kiếm tiền. Doanh thu ẩn tự động khi không có dữ liệu</td>
+            </tr>
+            <tr>
+              <td>Không thấy tên mình trên biểu đồ xu hướng</td>
+              <td>Chỉ có dữ liệu của mình ở 1 tháng duy nhất</td>
+              <td>Biểu đồ xu hướng cần ≥ 2 tháng dữ liệu để vẽ đường — lưu thêm tháng tiếp theo là xuất hiện</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Mẹo để dữ liệu luôn chính xác</h3>
+      <ul>
+        <li>Lưu tháng ngay sau khi xem kết quả — dữ liệu sẽ được giữ lại cho các tháng tiếp theo.</li>
+        <li>Đặt tên tháng nhất quán (<em>"Tháng 1/2026"</em>, <em>"Tháng 2/2026"</em>…) để biểu đồ xu hướng hiển thị đúng thứ tự.</li>
+        <li>Nếu team làm nhiều kênh YouTube, tạo kênh riêng cho mỗi kênh để số liệu không bị trộn lẫn.</li>
+        <li>Dùng nút <strong>Sửa file Excel</strong> để cập nhật dữ liệu mới mà không cần nhập lại danh sách Video ID từ đầu.</li>
+      </ul>
+    </section>
+
+    <div style="margin: 64px 0 32px; border-top: 2px solid var(--border);"></div>
+
+    <!-- ── Giới thiệu Lọc Video ID ── -->
+    <section class="section" id="gioi-thieu">
+      <h2 class="section-title">Lọc Video ID — Giới thiệu</h2>
+      <p>
+        Tính năng <strong>Lọc Video ID</strong> giải quyết bài toán cụ thể:
+        bạn có một file Google Sheet theo dõi ai làm video nào,
+        và muốn trích xuất nhanh danh sách Video ID của từng người để dán vào tab <em>Tính views</em>.
+      </p>
+      <div class="callout info">
+        <div class="callout-icon">💡</div>
+        <div class="callout-body">
+          <strong>Luồng hoạt động</strong><br/>
+          Upload file sheet quản lý nội dung → app tự động nhóm Video ID theo tên nhân sự →
+          copy ID của từng người → dán vào ô nhập liệu ở tab Tính views.
+        </div>
+      </div>
+    </section>
+
+    <!-- ── Lọc Video ID ── -->
+    <section class="section" id="loc-video-id">
+      <h2 class="section-title">Tính năng Lọc Video ID</h2>
+      <p>
+        Truy cập tab <strong>🔍 Lọc Video ID</strong> trên thanh điều hướng chính.
+        Tính năng này đọc file Excel / CSV từ Google Sheet của bạn và tự động:
+      </p>
+      <ul>
+        <li>Nhận diện hàng tiêu đề (có thể nằm ở bất kỳ hàng nào trong 5 hàng đầu)</li>
+        <li>Tìm cột <strong>My Video ID</strong> và cột <strong>Tên Người Làm</strong></li>
+        <li>Nhóm Video ID theo từng nhân sự</li>
+        <li>Hiển thị danh sách để copy hoặc export</li>
+      </ul>
+    </section>
+
+    <!-- ── Định dạng sheet mẫu ── -->
+    <section class="section" id="dinh-dang-sheet">
+      <h2 class="section-title">Định dạng sheet mẫu</h2>
+
+      <p>
+        File sheet của bạn có thể có bất kỳ số cột nào. App chỉ quan tâm đến
+        <span class="badge red">bắt buộc</span> hai cột: <code>My Video ID</code> và <code>Tên Người Làm</code>.
+        Các cột còn lại không bị ảnh hưởng.
+      </p>
+
+      <h3>Ví dụ cấu trúc sheet</h3>
+      <p>Đây là ví dụ điển hình — hàng 1 trống (trang trí), hàng 2 là tiêu đề, hàng 3 trở đi là dữ liệu:</p>
+
+      <div class="sheet-preview">
+        <div class="sheet-header">
+          <div class="cell col-rownum">#</div>
+          <div class="cell col-a">A</div>
+          <div class="cell col-b">B (Tiêu đề)</div>
+          <div class="cell col-c">C (My Video ID)</div>
+          <div class="cell col-d">D (Trạng thái)</div>
+          <div class="cell col-e">E (Tên Người Làm)</div>
+        </div>
+
+        <div class="sheet-row">
+          <div class="cell col-rownum">1</div>
+          <div class="cell col-a" style="color:#9ca3af;font-style:italic">← trang trí</div>
+          <div class="cell col-b"></div>
+          <div class="cell col-c"></div>
+          <div class="cell col-d"></div>
+          <div class="cell col-e"></div>
+        </div>
+
+        <div class="sheet-row header-row">
+          <div class="cell col-rownum">2</div>
+          <div class="cell col-a">LINK GỐC</div>
+          <div class="cell col-b">TIÊU ĐỀ</div>
+          <div class="cell col-c highlight-blue">My Video ID</div>
+          <div class="cell col-d">TRẠNG THÁI</div>
+          <div class="cell col-e highlight-blue">Tên Người Làm</div>
+        </div>
+
+        <div class="sheet-row">
+          <div class="cell col-rownum">3</div>
+          <div class="cell col-a" style="font-size:11px;color:#6b7280">youtube.com/…</div>
+          <div class="cell col-b">Video về mèo cute #1</div>
+          <div class="cell col-c highlight"><code>GI1b9_k-tN4</code></div>
+          <div class="cell col-d">Đã đăng</div>
+          <div class="cell col-e highlight">CT Minh Anh<br/>ED Tuân 95</div>
+        </div>
+
+        <div class="sheet-row">
+          <div class="cell col-rownum">4</div>
+          <div class="cell col-a" style="font-size:11px;color:#6b7280">youtube.com/…</div>
+          <div class="cell col-b">Top 10 bí ẩn thế giới</div>
+          <div class="cell col-c highlight"><code>XI0hV24RLEQ</code></div>
+          <div class="cell col-d">Đã đăng</div>
+          <div class="cell col-e highlight">ED Hoàng</div>
+        </div>
+
+        <div class="sheet-row">
+          <div class="cell col-rownum">5</div>
+          <div class="cell col-a" style="font-size:11px;color:#6b7280">youtube.com/…</div>
+          <div class="cell col-b">Review phim kinh dị 2026</div>
+          <div class="cell col-c highlight"><code>aB3cD4eF5gH</code></div>
+          <div class="cell col-d">Chờ duyệt</div>
+          <div class="cell col-e highlight">CT Tuyên<br/>ED Hoàng</div>
+        </div>
+
+        <div class="sheet-row">
+          <div class="cell col-rownum">6</div>
+          <div class="cell col-a"></div>
+          <div class="cell col-b">Video chưa có ID</div>
+          <div class="cell col-c" style="color:#9ca3af;font-style:italic">← trống → bỏ qua</div>
+          <div class="cell col-d">Đang làm</div>
+          <div class="cell col-e">CT Minh Anh</div>
+        </div>
+      </div>
+
+      <div class="callout success">
+        <div class="callout-icon">✅</div>
+        <div class="callout-body">
+          <strong>App tự tìm hàng tiêu đề</strong>
+          Không cần tiêu đề ở hàng 1 hay hàng 2 cố định.
+          App quét 5 hàng đầu, tìm hàng nào có đủ cột <code>My Video ID</code> và <code>Tên Người Làm</code> thì lấy làm tiêu đề.
+        </div>
+      </div>
+
+      <div class="callout warning">
+        <div class="callout-icon">⚠️</div>
+        <div class="callout-body">
+          <strong>Hàng không có Video ID hợp lệ sẽ bị bỏ qua</strong>
+          Video ID trên YouTube gồm đúng 11 ký tự (chữ, số, <code>-</code>, <code>_</code>).
+          Nếu ô My Video ID trống hoặc sai định dạng, hàng đó sẽ bị đếm vào <em>"không có ID"</em> và bỏ qua.
+        </div>
+      </div>
+
+      <h3>Cách điền cột Tên Người Làm</h3>
+      <p>Nếu một video có <strong>nhiều người làm</strong>, ghi tất cả tên trong một ô, ngăn cách bằng:</p>
+      <ul>
+        <li>Xuống dòng (Enter trong ô — phổ biến nhất)</li>
+        <li>Dấu phẩy <code>,</code></li>
+        <li>Dấu chấm phẩy <code>;</code></li>
+      </ul>
+
+      <pre><span class="c">-- Ví dụ nội dung ô "Tên Người Làm" --</span>
+<span class="s">CT Minh Anh</span>        <span class="c">← chỉ 1 người</span>
+<span class="s">CT Minh Anh
+ED Tuân 95</span>        <span class="c">← 2 người, xuống dòng</span>
+<span class="s">CT Tuyên, ED Hoàng</span> <span class="c">← dấu phẩy</span></pre>
+
+      <div class="callout info">
+        <div class="callout-icon">📌</div>
+        <div class="callout-body">
+          <strong>Prefix vai trò (tuỳ chọn)</strong>
+          Nếu tên nhân sự bắt đầu bằng <code>ED </code> hoặc <code>CT </code> (ví dụ: <em>ED Tuân 95</em>, <em>CT Minh Anh</em>),
+          app sẽ tự suy ra vai trò <strong>Editor</strong> / <strong>Content</strong>.
+          Bạn vẫn có thể đổi tay sau khi upload.
+        </div>
+      </div>
+    </section>
+
+    <!-- ── Tên cột ── -->
+    <section class="section" id="ten-cot">
+      <h2 class="section-title">Tên cột hợp lệ</h2>
+      <p>App nhận diện cột theo tên tiêu đề (không phân biệt hoa thường, không tính khoảng trắng đầu cuối). Dưới đây là tất cả tên được chấp nhận:</p>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Vai trò cột</th>
+              <th>Tên tiêu đề được chấp nhận</th>
+              <th>Ghi chú</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>Video ID</strong> <span class="required">bắt buộc</span></td>
+              <td>
+                <code>My Video ID</code> &nbsp;
+                <code>Video ID</code> &nbsp;
+                <code>video_id</code> &nbsp;
+                <code>id</code>
+              </td>
+              <td>Phải chứa YouTube ID 11 ký tự</td>
+            </tr>
+            <tr>
+              <td><strong>Tên nhân sự</strong> <span class="required">bắt buộc</span></td>
+              <td>
+                <code>Tên Người Làm</code> &nbsp;
+                <code>ten nguoi lam</code> &nbsp;
+                <code>Người Làm</code> &nbsp;
+                <code>staff</code>
+              </td>
+              <td>Nhiều tên trong 1 ô, cách nhau bằng enter / dấu phẩy</td>
+            </tr>
+            <tr>
+              <td><strong>Tiêu đề video</strong> <span class="optional">tuỳ chọn</span></td>
+              <td>
+                <code>Tiêu đề</code> &nbsp;
+                <code>tieu de</code> &nbsp;
+                <code>title</code> &nbsp;
+                <code>Tên bài</code> &nbsp;
+                <code>ten bai</code>
+              </td>
+              <td>Hiển thị trong bảng khi mở rộng</td>
+            </tr>
+            <tr>
+              <td><strong>Trạng thái</strong> <span class="optional">tuỳ chọn</span></td>
+              <td>
+                <code>Trạng thái</code> &nbsp;
+                <code>trang thai</code> &nbsp;
+                <code>status</code>
+              </td>
+              <td>Ví dụ: "Đã đăng", "Chờ duyệt"</td>
+            </tr>
+            <tr>
+              <td><strong>Ngày đăng</strong> <span class="optional">tuỳ chọn</span></td>
+              <td>
+                <code>Ngày đăng</code> &nbsp;
+                <code>ngay dang</code> &nbsp;
+                <code>published</code> &nbsp;
+                <code>publish date</code>
+              </td>
+              <td>Hiển thị trong bảng khi mở rộng</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="callout info">
+        <div class="callout-icon">🔍</div>
+        <div class="callout-body">
+          <strong>Vị trí cột không quan trọng</strong>
+          <code>My Video ID</code> có thể ở cột A, C, hay Z — app tìm theo tên, không theo vị trí cố định.
+          Bạn có thể thêm/xoá/sắp xếp lại cột thoải mái mà không cần lo lỗi.
+        </div>
+      </div>
+    </section>
+
+    <!-- ── Cách sử dụng ── -->
+    <section class="section" id="cach-dung">
+      <h2 class="section-title">Cách sử dụng</h2>
+
+      <div class="steps">
+        <div class="step">
+          <div class="step-num">1</div>
+          <div class="step-body">
+            <strong>Mở tab Lọc Video ID</strong>
+            <p>Bấm vào tab <strong>🔍 Lọc Video ID</strong> trên thanh điều hướng.</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="step-num">2</div>
+          <div class="step-body">
+            <strong>Upload file từ Google Sheet</strong>
+            <p>
+              Kéo thả file <code>.xlsx</code> / <code>.xls</code> / <code>.csv</code> vào vùng upload, hoặc bấm vào vùng đó để chọn file.
+              Để tải file từ Google Sheet: <em>File → Tải xuống → Microsoft Excel (.xlsx)</em>.
+            </p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="step-num">3</div>
+          <div class="step-body">
+            <strong>Xem danh sách nhân sự</strong>
+            <p>
+              App phân tích file và hiển thị danh sách nhân sự cùng số video của mỗi người.
+              Thanh tóm tắt ở trên cho biết tổng số nhân sự, video hợp lệ và số hàng bị bỏ qua.
+            </p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="step-num">4</div>
+          <div class="step-body">
+            <strong>Copy ID hoặc xem chi tiết</strong>
+            <p>
+              Bấm <strong>Copy IDs</strong> để sao chép toàn bộ Video ID của một người (mỗi ID một dòng, sẵn sàng dán vào tab Tính views).
+              Bấm <strong>Xem ▼</strong> để mở bảng chi tiết danh sách video của người đó.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <h3>Giao diện sau khi upload</h3>
+      <div class="ui-mock">
+        <div class="ui-row" style="padding-top:4px;border-bottom:1px solid var(--border);padding-bottom:8px;margin-bottom:4px;">
+          <span style="font-size:12px;color:var(--ink-muted);">4 nhân sự · 127 video · <span style="color:#d97706">12 không có ID</span></span>
+          <span style="flex:1"></span>
+          <span class="ui-btn">↺ Đổi file</span>
+          &nbsp;
+          <span class="ui-btn" style="background:var(--accent);color:#fff;border-color:var(--accent);">↓ Export Excel (4)</span>
+        </div>
+
+        <div class="ui-row">
+          <div class="ui-checkbox"><span>✓</span></div>
+          <span class="ui-name">CT Minh Anh</span>
+          <span class="ui-count">32 video</span>
+          <span class="ui-role content">Content</span>
+          <span class="ui-btn copy">✓ Đã copy</span>
+          <span class="ui-btn">Xem ▼</span>
+        </div>
+
+        <div class="ui-row">
+          <div class="ui-checkbox"><span>✓</span></div>
+          <span class="ui-name">ED Hoàng</span>
+          <span class="ui-count">45 video</span>
+          <span class="ui-role editor">Editor</span>
+          <span class="ui-btn">Copy IDs</span>
+          <span class="ui-btn">Xem ▼</span>
+        </div>
+
+        <div class="ui-row">
+          <div class="ui-checkbox"><span>✓</span></div>
+          <span class="ui-name">ED Tuân 95</span>
+          <span class="ui-count">28 video</span>
+          <span class="ui-role editor">Editor</span>
+          <span class="ui-btn">Copy IDs</span>
+          <span class="ui-btn">Xem ▼</span>
+        </div>
+
+        <div class="ui-row">
+          <div class="ui-checkbox"><span>✓</span></div>
+          <span class="ui-name">CT Tuyên</span>
+          <span class="ui-count">22 video</span>
+          <span class="ui-role content">Content</span>
+          <span class="ui-btn">Copy IDs</span>
+          <span class="ui-btn">Xem ▼</span>
+        </div>
+      </div>
+
+      <h3>Tìm kiếm nhân sự</h3>
+      <p>Dùng ô tìm kiếm phía trên danh sách để lọc nhanh khi có nhiều nhân sự. Gõ một phần tên là đủ.</p>
+
+      <h3>Chọn / bỏ chọn</h3>
+      <p>
+        Mỗi hàng có ô checkbox bên trái. Chỉ những nhân sự được tích chọn mới được đưa vào file Export Excel.
+        Bấm <strong>Chọn tất cả</strong> / <strong>Bỏ chọn tất cả</strong> để thao tác nhanh.
+      </p>
+    </section>
+
+    <!-- ── Vai trò ── -->
+    <section class="section" id="vai-tro">
+      <h2 class="section-title">Gán vai trò nhân sự</h2>
+
+      <p>
+        Mỗi nhân sự cần được gán vai trò (<strong>Editor</strong> hoặc <strong>Content</strong>) để khi export,
+        file Excel biết phân loại đúng. App tự suy ra vai trò dựa vào prefix tên:
+      </p>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Tên nhân sự</th><th>Vai trò tự suy</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><code>ED Tuân 95</code></td><td><span class="badge blue">Editor</span></td></tr>
+            <tr><td><code>ED_Hoàng</code></td><td><span class="badge blue">Editor</span></td></tr>
+            <tr><td><code>CT Minh Anh</code></td><td><span class="badge green">Content</span></td></tr>
+            <tr><td><code>CT_Tuyên</code></td><td><span class="badge green">Content</span></td></tr>
+            <tr><td><code>Nguyễn Văn A</code></td><td><span class="badge gray">Mặc định (Editor)</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="callout info">
+        <div class="callout-icon">🔄</div>
+        <div class="callout-body">
+          <strong>Đổi vai trò thủ công</strong>
+          Bấm vào badge vai trò màu xanh (ví dụ <span class="badge blue">Editor</span>) ngay trên hàng của nhân sự đó để chuyển sang vai trò tiếp theo.
+          Thao tác này chỉ ảnh hưởng đến lần export hiện tại, không ghi vào file gốc.
+        </div>
+      </div>
+    </section>
+
+    <!-- ── Export ── -->
+    <section class="section" id="export">
+      <h2 class="section-title">Export Excel</h2>
+
+      <p>
+        Bấm <strong>↓ Export Excel</strong> ở góc trên phải để tải file <code>staff-video-ids.xlsx</code>.
+        File có 2 sheet:
+      </p>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Sheet</th><th>Nội dung</th><th>Dùng để</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>Staff → Video IDs</strong></td>
+              <td>1 hàng / nhân sự. Cột cuối chứa tất cả Video ID của người đó, mỗi ID một dòng trong ô.</td>
+              <td>Copy nhanh để dán vào ô nhập Video ID ở tab Tính views</td>
+            </tr>
+            <tr>
+              <td><strong>Chi tiết</strong></td>
+              <td>1 hàng / (nhân sự × video). Có cột: Tên, Vai trò, Video ID, Tiêu đề, Trạng thái, Ngày đăng.</td>
+              <td>Lọc, phân tích thêm trong Excel / Google Sheets</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="callout success">
+        <div class="callout-icon">💾</div>
+        <div class="callout-body">
+          <strong>Chỉ export nhân sự đã chọn</strong>
+          Bỏ tích checkbox của những nhân sự không cần thiết trước khi bấm Export.
+          Số nhân sự đang chọn hiển thị trong dấu ngoặc trên nút: <em>↓ Export Excel (3)</em>.
+        </div>
+      </div>
+    </section>
+
+    <!-- ── Lưu ý ── -->
+    <section class="section" id="luu-y">
+      <h2 class="section-title">Lưu ý &amp; Lỗi thường gặp</h2>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Lỗi / Tình huống</th><th>Nguyên nhân</th><th>Cách khắc phục</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Không tìm thấy hàng tiêu đề</td>
+              <td>5 hàng đầu không có cột <code>My Video ID</code> và <code>Tên Người Làm</code> cùng lúc</td>
+              <td>Đổi tên cột theo danh sách hợp lệ ở trên, đảm bảo cả 2 cột cùng nằm trong 5 hàng đầu</td>
+            </tr>
+            <tr>
+              <td>Không tìm thấy cột 'Video ID'</td>
+              <td>Tên tiêu đề cột không khớp</td>
+              <td>Đổi tên cột thành <code>My Video ID</code></td>
+            </tr>
+            <tr>
+              <td>N không có ID (màu vàng)</td>
+              <td>Hàng có ô My Video ID trống hoặc không phải ID YouTube 11 ký tự</td>
+              <td>Bình thường nếu có video chưa đăng. Kiểm tra lại nếu con số cao bất thường</td>
+            </tr>
+            <tr>
+              <td>Nhân sự xuất hiện trong nhóm "— Chưa phân công"</td>
+              <td>Ô Tên Người Làm của video đó trống</td>
+              <td>Điền tên nhân sự vào ô đó trong sheet gốc rồi upload lại</td>
+            </tr>
+            <tr>
+              <td>Một nhân sự bị tách thành 2 dòng riêng</td>
+              <td>Tên ghi không nhất quán (ví dụ "Tuân 95" và "Tuân95")</td>
+              <td>Chuẩn hoá tên trong sheet gốc — app phân biệt chính xác từng ký tự</td>
+            </tr>
+            <tr>
+              <td>File không mở được</td>
+              <td>File không phải .xlsx / .xls / .csv, hoặc bị hỏng</td>
+              <td>Tải lại từ Google Sheet dưới dạng <em>Microsoft Excel (.xlsx)</em></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Mẹo sử dụng</h3>
+      <ul>
+        <li>Bạn có thể upload lại bất cứ lúc nào bằng nút <strong>↺ Đổi file</strong> — không cần reload trang.</li>
+        <li>Video ID được <strong>dedup tự động</strong> — nếu một video xuất hiện 2 lần trong sheet, ID chỉ được tính 1 lần cho mỗi nhân sự.</li>
+        <li>Nếu một video có nhiều nhân sự, Video ID đó sẽ xuất hiện trong danh sách của <em>tất cả</em> những người liên quan.</li>
+        <li>Tính năng hoạt động hoàn toàn trong trình duyệt — dữ liệu không được gửi lên server.</li>
+      </ul>
+    </section>
+
+
+    <!-- ════════════════════════════════════════════════════════════════
+         TÌM MY VIDEO ID
+    ═══════════════════════════════════════════════════════════════════ -->
+
+    <div style="margin: 64px 0 32px; border-top: 3px solid var(--accent); padding-top: 40px;">
+      <div class="hero" style="background: #f0fdf4; border-color: #bbf7d0;">
+        <h1 style="color: #059669;">Tìm My Video ID</h1>
+        <p style="color: #065f46;">
+          Tự động tìm kiếm Video ID trên YouTube theo tiêu đề và điền vào bảng theo dõi còn thiếu.
+        </p>
+      </div>
+    </div>
+
+    <!-- ── Giới thiệu tính năng ── -->
+    <section class="section" id="tim-video-id">
+      <h2 class="section-title">Giới thiệu tính năng</h2>
+
+      <p>
+        Nhiều team sử dụng bảng <strong>Tiến Độ công việc</strong> trên Google Sheet để theo dõi
+        video nào đã làm xong, ai phụ trách, và trạng thái đăng tải — nhưng <em>không điền cột
+        My Video ID</em>. Khi cần đưa dữ liệu vào YT Tracker để tính views, cột đó bị trống.
+      </p>
+
+      <p>
+        Tính năng <strong>Tìm My Video ID</strong> giải quyết vấn đề này:
+        bạn chỉ cần có <em>tiêu đề video</em> trong sheet — app sẽ tự tìm kiếm trên YouTube
+        theo kênh của bạn, khớp tên, và điền Video ID vào đúng cột.
+      </p>
+
+      <div class="callout info">
+        <div class="callout-icon">💡</div>
+        <div class="callout-body">
+          <strong>Luồng hoạt động</strong><br/>
+          Nhập handle kênh YouTube → Upload sheet → App tìm kiếm từng tiêu đề →
+          Xác nhận kết quả → Export file đã điền Video ID.
+        </div>
+      </div>
+
+      <div class="callout success">
+        <div class="callout-icon">✅</div>
+        <div class="callout-body">
+          <strong>Hoạt động hoàn toàn trong trình duyệt</strong><br/>
+          Không cần API key, không gửi dữ liệu lên server. Kết quả tìm kiếm được cache
+          trong trình duyệt — reload trang không mất dữ liệu.
+        </div>
+      </div>
+    </section>
+
+    <!-- ── Định dạng sheet mẫu ── -->
+    <section class="section" id="tim-dinh-dang-sheet">
+      <h2 class="section-title">Định dạng sheet mẫu</h2>
+
+      <p>
+        Sheet của bạn chỉ cần có một cột bắt buộc. Các cột còn lại là tùy chọn giúp
+        tăng độ chính xác khi tìm kiếm và lọc kết quả.
+      </p>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Cột</th>
+              <th>Mức độ</th>
+              <th>Tên hợp lệ</th>
+              <th>Mô tả</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>Tiêu đề</strong></td>
+              <td><span class="badge red">Bắt buộc</span></td>
+              <td><code>Tiêu đề</code>, <code>tieu de</code>, <code>title</code>, <code>tên bài</code>, <code>ten bai</code></td>
+              <td>Tiêu đề video — dùng để tìm kiếm trên YouTube</td>
+            </tr>
+            <tr>
+              <td><strong>My Video ID</strong></td>
+              <td><span class="badge red">Bắt buộc</span></td>
+              <td><code>My Video ID</code>, <code>video id</code>, <code>id</code></td>
+              <td>Cột để app điền kết quả vào. Nếu sheet chưa có cột này, app sẽ tự tạo thêm khi export. Nếu ô đã có sẵn ID thì giữ nguyên.</td>
+            </tr>
+            <tr>
+              <td><strong>My Video URL</strong></td>
+              <td><span class="optional">Tùy chọn</span></td>
+              <td><code>My Video URL</code>, <code>link</code>, <code>url</code></td>
+              <td>Nếu có link YouTube hợp lệ, app tự trích xuất ID — không cần tìm kiếm</td>
+            </tr>
+            <tr>
+              <td><strong>Search</strong></td>
+              <td><span class="optional">Tùy chọn</span></td>
+              <td><code>Search</code>, <code>search query</code></td>
+              <td>Từ khoá tìm kiếm tuỳ chỉnh — dùng thay tiêu đề khi tiêu đề quá dài hoặc không khớp</td>
+            </tr>
+            <tr>
+              <td><strong>Tên Người Làm</strong></td>
+              <td><span class="optional">Tùy chọn</span></td>
+              <td><code>Tên Người Làm</code>, <code>staff</code></td>
+              <td>Tên nhân sự — dùng để lọc khi export (chỉ xuất video của một người)</td>
+            </tr>
+            <tr>
+              <td><strong>Thời lượng</strong></td>
+              <td><span class="optional">Tùy chọn</span></td>
+              <td><code>Thời lượng</code>, <code>duration</code></td>
+              <td>Thời lượng video — hiển thị khi duyệt thủ công để dễ nhận diện video đúng</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Ví dụ cấu trúc sheet (trước khi tìm kiếm)</h3>
+      <p>Hàng 1 có thể trống hoặc chứa thông tin trang trí. Hàng 2 là tiêu đề cột. Dữ liệu từ hàng 3 trở đi:</p>
+
+      <div class="sheet-preview">
+        <div class="sheet-header">
+          <div class="cell col-rownum">#</div>
+          <div class="cell" style="flex:2.5">Tiêu đề (bắt buộc)</div>
+          <div class="cell" style="flex:1.2">Thời lượng</div>
+          <div class="cell" style="flex:1.5">My Video URL</div>
+          <div class="cell" style="flex:1.5">My Video ID</div>
+          <div class="cell" style="flex:1.5">Tên Người Làm</div>
+        </div>
+
+        <div class="sheet-row header-row">
+          <div class="cell col-rownum">1</div>
+          <div class="cell" style="flex:2.5;color:#9ca3af;font-style:italic">← trang trí</div>
+          <div class="cell" style="flex:1.2"></div>
+          <div class="cell" style="flex:1.5"></div>
+          <div class="cell" style="flex:1.5"></div>
+          <div class="cell" style="flex:1.5"></div>
+        </div>
+
+        <div class="sheet-row header-row">
+          <div class="cell col-rownum">2</div>
+          <div class="cell highlight-blue" style="flex:2.5">Tiêu đề</div>
+          <div class="cell" style="flex:1.2">Thời lượng</div>
+          <div class="cell" style="flex:1.5">My Video URL</div>
+          <div class="cell highlight-blue" style="flex:1.5">My Video ID</div>
+          <div class="cell" style="flex:1.5">Tên Người Làm</div>
+        </div>
+
+        <div class="sheet-row">
+          <div class="cell col-rownum">3</div>
+          <div class="cell" style="flex:2.5">20 bí ẩn về vũ trụ chưa có lời giải</div>
+          <div class="cell" style="flex:1.2">12:34</div>
+          <div class="cell" style="flex:1.5;color:#9ca3af;font-style:italic">← trống</div>
+          <div class="cell" style="flex:1.5;color:#9ca3af;font-style:italic">← trống → app điền</div>
+          <div class="cell" style="flex:1.5">CT Minh Anh<br/>ED Tuân 95</div>
+        </div>
+
+        <div class="sheet-row">
+          <div class="cell col-rownum">4</div>
+          <div class="cell" style="flex:2.5">Top 10 loài động vật nguy hiểm nhất</div>
+          <div class="cell" style="flex:1.2">8:20</div>
+          <div class="cell highlight" style="flex:1.5;font-size:11px">youtube.com/watch?v=XI0hV24RLEQ</div>
+          <div class="cell" style="flex:1.5;color:#9ca3af;font-style:italic">← app tự trích xuất</div>
+          <div class="cell" style="flex:1.5">ED Hoàng</div>
+        </div>
+
+        <div class="sheet-row">
+          <div class="cell col-rownum">5</div>
+          <div class="cell" style="flex:2.5">Review phim kinh dị 2026 — spoiler full</div>
+          <div class="cell" style="flex:1.2">18:05</div>
+          <div class="cell" style="flex:1.5;color:#9ca3af;font-style:italic">← trống</div>
+          <div class="cell highlight" style="flex:1.5"><code>aB3cD4eF5gH</code></div>
+          <div class="cell" style="flex:1.5">CT Tuyên</div>
+        </div>
+      </div>
+
+      <div class="callout success">
+        <div class="callout-icon">✅</div>
+        <div class="callout-body">
+          <strong>Ưu tiên xử lý tự động</strong><br/>
+          Hàng 4: có <code>My Video URL</code> → app tự trích xuất ID mà không tốn lượt tìm kiếm.<br/>
+          Hàng 5: đã có <code>My Video ID</code> → giữ nguyên, không cần tìm kiếm.<br/>
+          Hàng 3: cả hai đều trống → app tìm kiếm trên YouTube theo tiêu đề.
+        </div>
+      </div>
+    </section>
+
+    <!-- ── Cách sử dụng ── -->
+    <section class="section" id="tim-cach-dung">
+      <h2 class="section-title">Cách sử dụng</h2>
+
+      <div class="steps">
+        <div class="step">
+          <div class="step-num">1</div>
+          <div class="step-body">
+            <strong>Mở tab Tìm My Video ID</strong>
+            <p>Trên thanh điều hướng chính, chọn tab <strong>🔍 Tìm My Video ID</strong>.</p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="step-num">2</div>
+          <div class="step-body">
+            <strong>Nhập handle kênh YouTube</strong>
+            <p>
+              Điền đường dẫn kênh YouTube của bạn vào ô nhập liệu.
+              App sẽ chỉ tìm kiếm trong phạm vi kênh này, tránh nhầm lẫn với video của kênh khác.
+            </p>
+            <div class="callout info" style="margin-top:10px">
+              <div class="callout-icon">ℹ️</div>
+              <div class="callout-body">
+                Định dạng hợp lệ: <code>@TenKenh</code> hoặc <code>youtube.com/@TenKenh</code>
+                hoặc <code>youtube.com/c/TenKenh</code>.
+                App tự chuẩn hoá về dạng đường dẫn đúng.
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="step-num">3</div>
+          <div class="step-body">
+            <strong>Upload file sheet</strong>
+            <p>
+              Kéo thả hoặc bấm để chọn file <code>.xlsx</code> / <code>.xls</code> / <code>.csv</code>
+              đã xuất từ Google Sheet. App tự nhận diện hàng tiêu đề và các cột liên quan.
+            </p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="step-num">4</div>
+          <div class="step-body">
+            <strong>Bắt đầu tìm kiếm</strong>
+            <p>
+              Bấm nút <strong>Bắt đầu tìm kiếm</strong>. App lần lượt tìm kiếm từng video còn
+              thiếu ID trên YouTube. Thanh tiến trình hiển thị số video đã xử lý.
+            </p>
+            <div class="callout info" style="margin-top:10px">
+              <div class="callout-icon">⚡</div>
+              <div class="callout-body">
+                Video đã có <code>My Video URL</code> hoặc <code>My Video ID</code> sẵn sẽ được
+                bỏ qua — không tốn lượt tìm kiếm.
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="step-num">5</div>
+          <div class="step-body">
+            <strong>Duyệt và xác nhận kết quả</strong>
+            <p>
+              Sau khi tìm kiếm xong, app hiển thị danh sách kết quả.
+              Với mỗi video, bạn cần xác nhận hoặc chọn ID đúng (xem mục "Các kết quả khớp" bên dưới).
+            </p>
+          </div>
+        </div>
+
+        <div class="step">
+          <div class="step-num">6</div>
+          <div class="step-body">
+            <strong>Export file đã điền</strong>
+            <p>
+              Bấm <strong>Export Excel</strong> để tải file gốc với cột <code>My Video ID</code>
+              đã được điền đầy đủ. File giữ nguyên toàn bộ cấu trúc ban đầu.
+            </p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── Các kết quả khớp ── -->
+    <section class="section" id="tim-ket-qua-khop">
+      <h2 class="section-title">Các kết quả khớp</h2>
+
+      <p>
+        Sau khi tìm kiếm, mỗi video sẽ rơi vào một trong ba trạng thái.
+        Hiểu các trạng thái này giúp bạn duyệt nhanh và chính xác hơn.
+      </p>
+
+      <!-- Found -->
+      <div class="callout success">
+        <div class="callout-icon">✅</div>
+        <div class="callout-body">
+          <strong>Khớp tự động (1 kết quả)</strong><br/>
+          App tìm thấy đúng 1 video phù hợp — tự động xác nhận và điền ID.
+          Bạn không cần làm gì thêm. Những video này hiển thị với badge xanh.
+        </div>
+      </div>
+
+      <!-- Multiple -->
+      <div class="callout" style="border-color:#c4b5fd; background:#f5f3ff;">
+        <div class="callout-icon" style="color:#7c3aed;">🔍</div>
+        <div class="callout-body">
+          <strong>Nhiều kết quả (cần chọn)</strong><br/>
+          App tìm thấy nhiều video có tiêu đề tương tự. App hiển thị các ứng viên dưới dạng
+          thẻ thumbnail kèm tên và thời lượng — bạn bấm vào đúng video để xác nhận.
+          Nếu không video nào khớp, có thể nhập ID thủ công hoặc bỏ qua.
+        </div>
+      </div>
+
+      <!-- Not found -->
+      <div class="callout" style="border-color:#fca5a5; background:#fff1f2;">
+        <div class="callout-icon" style="color:#b91c1c;">❌</div>
+        <div class="callout-body">
+          <strong>Không tìm thấy</strong><br/>
+          Không có kết quả nào từ YouTube. Có thể do tiêu đề quá khác so với tên video thực tế,
+          hoặc video chưa được đăng tải. Bạn có thể:
+          <ul style="margin-top:6px">
+            <li>Nhập Video ID thủ công vào ô dự phòng</li>
+            <li>Bỏ qua — ô <code>My Video ID</code> sẽ để trống khi export</li>
+          </ul>
+        </div>
+      </div>
+
+      <h3>Mẹo để tăng tỷ lệ khớp tự động</h3>
+      <ul>
+        <li>
+          Thêm cột <code>Search</code> vào sheet với từ khoá ngắn gọn hơn.
+          App sẽ dùng nội dung cột này thay cho tiêu đề đầy đủ khi tìm kiếm.
+        </li>
+        <li>
+          Nếu sheet có cột <code>My Video URL</code>, điền link YouTube đầy đủ — app
+          tự trích xuất ID mà không cần tìm kiếm, đảm bảo độ chính xác 100%.
+        </li>
+        <li>
+          Nếu tiêu đề có ký tự đặc biệt hoặc emoji, cân nhắc dùng cột <code>Search</code>
+          với từ khoá thuần chữ.
+        </li>
+        <li>
+          Trong giao diện duyệt thủ công, app hiển thị link Google Drive của sản phẩm (nếu có)
+          để giúp bạn đối chiếu video đúng.
+        </li>
+      </ul>
+    </section>
+
+    <!-- ── Kết quả đầu ra ── -->
+    <section class="section" id="tim-export">
+      <h2 class="section-title">Kết quả đầu ra</h2>
+
+      <p>
+        Sau khi xác nhận xong, bấm nút <strong>Export Excel</strong> để tải file kết quả.
+        File xuất ra <strong>giữ nguyên toàn bộ cấu trúc gốc</strong> — tất cả cột, định dạng,
+        và dữ liệu ban đầu được bảo toàn. Chỉ có cột <code>My Video ID</code> được thêm/cập nhật.
+      </p>
+
+      <h3>Quy tắc xuất file</h3>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Trường hợp</th><th>Hành động</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Cột <code>My Video ID</code> đã có sẵn trong sheet gốc</td>
+              <td>Điền ID vào đúng ô tương ứng, giữ nguyên các ô đã có giá trị</td>
+            </tr>
+            <tr>
+              <td>Cột <code>My Video ID</code> chưa có trong sheet gốc</td>
+              <td>Tự động chèn thêm cột mới (ngay sau cột <code>Tiêu đề</code>)</td>
+            </tr>
+            <tr>
+              <td>Video đã có ID ngay từ đầu (không cần tìm)</td>
+              <td>Giữ nguyên ID gốc</td>
+            </tr>
+            <tr>
+              <td>Video bị bỏ qua (không xác nhận)</td>
+              <td>Ô <code>My Video ID</code> để trống</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Lọc theo nhân sự khi export</h3>
+      <p>
+        Nếu sheet có cột <strong>Tên Người Làm</strong>, giao diện export cho phép chọn một
+        nhân sự cụ thể — file kết quả chỉ chứa các video của người đó, thuận tiện để gửi
+        cho từng thành viên hoặc nhập vào tab <em>Tính views</em>.
+      </p>
+
+      <h3>Ví dụ file sau khi export</h3>
+      <p>Cột <code>My Video ID</code> đã được điền, cấu trúc còn lại giữ nguyên:</p>
+
+      <div class="sheet-preview">
+        <div class="sheet-header">
+          <div class="cell col-rownum">#</div>
+          <div class="cell" style="flex:2.5">Tiêu đề</div>
+          <div class="cell" style="flex:1.2">Thời lượng</div>
+          <div class="cell" style="flex:1.5">My Video URL</div>
+          <div class="cell" style="flex:1.5">My Video ID</div>
+          <div class="cell" style="flex:1.5">Tên Người Làm</div>
+        </div>
+
+        <div class="sheet-row">
+          <div class="cell col-rownum">3</div>
+          <div class="cell" style="flex:2.5">20 bí ẩn về vũ trụ chưa có lời giải</div>
+          <div class="cell" style="flex:1.2">12:34</div>
+          <div class="cell" style="flex:1.5;color:#9ca3af">—</div>
+          <div class="cell highlight" style="flex:1.5"><code>GI1b9_k-tN4</code> ✅</div>
+          <div class="cell" style="flex:1.5">CT Minh Anh<br/>ED Tuân 95</div>
+        </div>
+
+        <div class="sheet-row">
+          <div class="cell col-rownum">4</div>
+          <div class="cell" style="flex:2.5">Top 10 loài động vật nguy hiểm nhất</div>
+          <div class="cell" style="flex:1.2">8:20</div>
+          <div class="cell" style="flex:1.5;font-size:11px">youtube.com/watch?v=XI0hV24RLEQ</div>
+          <div class="cell highlight" style="flex:1.5"><code>XI0hV24RLEQ</code> ✅</div>
+          <div class="cell" style="flex:1.5">ED Hoàng</div>
+        </div>
+
+        <div class="sheet-row">
+          <div class="cell col-rownum">5</div>
+          <div class="cell" style="flex:2.5">Review phim kinh dị 2026 — spoiler full</div>
+          <div class="cell" style="flex:1.2">18:05</div>
+          <div class="cell" style="flex:1.5;color:#9ca3af">—</div>
+          <div class="cell highlight" style="flex:1.5"><code>aB3cD4eF5gH</code> ✅</div>
+          <div class="cell" style="flex:1.5">CT Tuyên</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── Lưu ý & Lỗi thường gặp ── -->
+    <section class="section" id="tim-luu-y">
+      <h2 class="section-title">Lưu ý &amp; Lỗi thường gặp</h2>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Lỗi / Tình huống</th><th>Nguyên nhân</th><th>Cách khắc phục</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Không tìm thấy hàng tiêu đề</td>
+              <td>5 hàng đầu không có cột <code>Tiêu đề</code></td>
+              <td>Đổi tên cột theo danh sách hợp lệ, đảm bảo nằm trong 5 hàng đầu</td>
+            </tr>
+            <tr>
+              <td>Tỷ lệ "Không tìm thấy" cao</td>
+              <td>Tiêu đề trong sheet khác nhiều so với tiêu đề thật trên YouTube</td>
+              <td>Thêm cột <code>Search</code> với từ khoá ngắn hơn, hoặc điền <code>My Video URL</code> trực tiếp</td>
+            </tr>
+            <tr>
+              <td>App tìm thấy video sai kênh</td>
+              <td>Handle kênh nhập không đúng</td>
+              <td>Kiểm tra lại handle — thử mở <code>youtube.com/@TenKenh</code> để xác nhận</td>
+            </tr>
+            <tr>
+              <td>Mất kết quả sau khi reload trang</td>
+              <td>Cache bị xoá (chế độ riêng tư / incognito)</td>
+              <td>Dùng cửa sổ trình duyệt thông thường, hoặc export ngay sau khi duyệt xong</td>
+            </tr>
+            <tr>
+              <td>File export thiếu cột My Video ID</td>
+              <td>Chưa xác nhận bất kỳ kết quả nào</td>
+              <td>Duyệt ít nhất 1 video trước khi export, hoặc kiểm tra lại bước tìm kiếm</td>
+            </tr>
+            <tr>
+              <td>Video đã có URL nhưng vẫn bị tìm kiếm</td>
+              <td>Tên cột <code>My Video URL</code> không khớp</td>
+              <td>Đổi tên cột thành <code>My Video URL</code> hoặc <code>link</code></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Lưu ý về giới hạn tìm kiếm</h3>
+      <div class="callout" style="border-color:#fcd34d; background:#fffbeb;">
+        <div class="callout-icon" style="color:#d97706;">⚠️</div>
+        <div class="callout-body">
+          Tính năng tìm kiếm sử dụng YouTube Data API thông qua trình duyệt.
+          Nếu bạn tìm kiếm số lượng lớn video trong thời gian ngắn, YouTube có thể
+          tạm thời giới hạn tốc độ. Trong trường hợp đó, hãy chờ vài phút rồi tiếp tục.
+          Kết quả đã tìm được vẫn được giữ nguyên trong cache.
+        </div>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<script>
+  // Highlight active nav item on scroll
+  const sections = document.querySelectorAll('section[id]');
+  const navItems = document.querySelectorAll('.nav-item');
+
+  const observer = new IntersectionObserver(entries => {
+    entries.forEach(e => {
+      if (e.isIntersecting) {
+        navItems.forEach(n => n.classList.remove('active'));
+        const active = document.querySelector(`.nav-item[href="#${e.target.id}"]`);
+        if (active) active.classList.add('active');
+      }
+    });
+  }, { rootMargin: '-20% 0px -70% 0px' });
+
+  sections.forEach(s => observer.observe(s));
+</script>
+
+</body>
+</html>

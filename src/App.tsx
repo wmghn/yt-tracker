@@ -358,6 +358,19 @@ export default function App() {
             🔍 Lọc Video ID
           </button>
 
+          {/* Hướng dẫn link */}
+          <a
+            href="/huong-dan.html"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-1.5 py-3.5 px-4 text-sm font-semibold border-b-2 border-transparent text-ink-tertiary hover:text-ink transition-all ml-auto"
+          >
+            <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor">
+              <path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"/>
+            </svg>
+            Hướng dẫn
+          </a>
+
           {/* Salary step indicators */}
           {tab === "salary" && salarySubTab === "calc" && (
             <div className="flex items-center gap-1 ml-2 border-l border-border pl-4">

@@ -264,7 +264,7 @@ export default function OverviewTab({ allMetrics }: Omit<Props, "trends">) {
         {[
           { label: "Nhân sự",       value: String(kpis.staffCount),               color: "text-ink",         badge: null },
           { label: "Video theo dõi", value: String(kpis.videoCount),              color: "text-ink",         badge: "tổng" as const },
-          { label: "Tổng views",    value: fmt(kpis.totalViews),                  color: "text-accent",      badge: "tỷ lệ" as const },
+          { label: "Tổng views",    value: kpis.totalViews.toLocaleString("vi-VN"), color: "text-accent",      badge: "tỷ lệ" as const },
           ...(hasRevenue ? [{ label: "Tổng doanh thu", value: `$${kpis.totalRevenue.toFixed(2)}`, color: "text-emerald-600", badge: "tỷ lệ" as const }] : []),
         ].map(k => (
           <div key={k.label} className="card p-4">
