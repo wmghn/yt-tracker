@@ -14,6 +14,10 @@ export default defineConfig({
   build: {
     target: "es2020",
     rollupOptions: {
+      input: {
+        main:      "index.html",
+        huongdan:  "huong-dan.html",
+      },
       output: { manualChunks: { xlsx: ["xlsx"] } },
     },
   },
