@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import type { StaffPeriodMetrics, StaffTrend, TrendLabel } from "@/lib/services/analytics";
+import type { StaffPeriodMetrics, StaffTrend } from "@/lib/services/analytics";
 
 interface Props {
   allMetrics: StaffPeriodMetrics[];
@@ -14,18 +14,7 @@ interface AggStaff {
   avgWatchTimePerVideo: number;
   totalViews:          number;
   totalRevenue:        number;
-  trendLabel:          TrendLabel;
-  trendScore:          number;
 }
-
-const TREND_CONFIG: Record<TrendLabel, { label: string; badge: string; icon: string }> = {
-  rising_strong:     { label: "Tăng mạnh",   badge: "bg-emerald-100 text-emerald-700 border-emerald-200", icon: "↑↑" },
-  rising:            { label: "Tăng",         badge: "bg-green-50 text-green-600 border-green-200",        icon: "↑"  },
-  stable:            { label: "Ổn định",      badge: "bg-slate-100 text-slate-600 border-slate-200",       icon: "→"  },
-  declining:         { label: "Giảm",         badge: "bg-amber-50 text-amber-600 border-amber-200",        icon: "↓"  },
-  declining_severe:  { label: "Giảm mạnh",    badge: "bg-red-50 text-red-600 border-red-200",              icon: "↓↓" },
-  insufficient_data: { label: "Chưa đủ data", badge: "bg-slate-50 text-slate-400 border-slate-200",        icon: "–"  },
-};
 
 function formatNum(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
@@ -95,12 +84,10 @@ function RoleGroup({ role, members, hasRevenue }: { role: string; members: AggSt
                   <span className="ml-1 normal-case font-medium text-[10px] px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-600 border border-blue-200">tỷ lệ</span>
                 </th>
               )}
-              <th className="px-4 py-3 text-left text-xs font-bold text-ink-tertiary uppercase tracking-wide whitespace-nowrap">Xu hướng</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
             {ranked.map((m, i) => {
-              const trendCfg   = TREND_CONFIG[m.trendLabel];
               const barViewsPct  = (m.totalViews / maxViews) * 100;
               const barWatchPct  = (m.totalWatchTime / maxWatch) * 100;
               const barRevPct    = hasRevenue ? (m.totalRevenue / maxRevenue) * 100 : 0;
@@ -171,12 +158,6 @@ function RoleGroup({ role, members, hasRevenue }: { role: string; members: AggSt
                     </td>
                   )}
 
-                  {/* Trend */}
-                  <td className="px-4 py-4">
-                    <span className={`text-xs font-bold px-2 py-1 rounded-full border whitespace-nowrap ${trendCfg.badge}`}>
-                      {trendCfg.icon} {trendCfg.label}
-                    </span>
-                  </td>
                 </tr>
               );
             })}
@@ -187,13 +168,7 @@ function RoleGroup({ role, members, hasRevenue }: { role: string; members: AggSt
   );
 }
 
-export default function RoleCompareTab({ allMetrics, trends }: Props) {
-  const trendMap = useMemo(() => {
-    const m = new Map<string, StaffTrend>();
-    for (const t of trends) m.set(`${t.staffName}::${t.role}`, t);
-    return m;
-  }, [trends]);
-
+export default function RoleCompareTab({ allMetrics }: Omit<Props, "trends">) {
   // Aggregate per-staff across all periods
   const aggregated = useMemo(() => {
     const map = new Map<string, AggStaff>();
@@ -208,27 +183,19 @@ export default function RoleCompareTab({ allMetrics, trends }: Props) {
           avgWatchTimePerVideo: 0,
           totalViews:           0,
           totalRevenue:         0,
-          trendLabel:           "insufficient_data",
-          trendScore:           0,
         });
       }
       const agg = map.get(key)!;
-      agg.videoCount   += m.videoCount;
+      agg.videoCount     += m.videoCount;
       agg.totalWatchTime += m.totalWatchTime;
-      agg.totalViews   += m.weightedViews;
-      agg.totalRevenue += m.totalRevenue;
+      agg.totalViews     += m.weightedViews;
+      agg.totalRevenue   += m.totalRevenue;
     }
-    // Compute averages + attach trend
-    for (const [key, agg] of map) {
+    for (const agg of map.values()) {
       agg.avgWatchTimePerVideo = agg.videoCount > 0 ? agg.totalWatchTime / agg.videoCount : 0;
-      const trend = trendMap.get(key);
-      if (trend) {
-        agg.trendLabel = trend.label;
-        agg.trendScore = trend.score;
-      }
     }
     return Array.from(map.values());
-  }, [allMetrics, trendMap]);
+  }, [allMetrics]);
 
   const hasRevenue = aggregated.some(m => m.totalRevenue > 0);
 

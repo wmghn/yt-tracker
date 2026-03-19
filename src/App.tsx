@@ -1,18 +1,25 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
-import type { AppState, StaffMember, OptionalColumnKey, VideoRow } from "@/types";
+import type { AppState, Channel, MonthSession, StaffMember, OptionalColumnKey, VideoRow } from "@/types";
 import { INITIAL_STATE } from "@/types";
 import { GROUPS } from "@/config/groups";
-import { saveSession, loadSession, clearSession } from "@/lib/storage/session-storage";
+import {
+  saveSession, loadSession, clearSession,
+  saveChannels, loadChannels,
+  saveSessions, loadSessions,
+  getChannelSessions, upsertSession, deleteSession, reorderSessions,
+  migrateFromOldState,
+} from "@/lib/storage/session-storage";
 import { computeAttribution } from "@/lib/services/attribution";
-import { getDistinctPeriods } from "@/lib/services/analytics";
+import { derivePeriod, periodLabel, parsePeriodFromName } from "@/lib/services/analytics";
 
-import UploadZone            from "@/components/features/UploadZone";
-import StaffPanel            from "@/components/features/StaffPanel";
-import ResultsTable          from "@/components/features/ResultsTable";
-// import TranscriptDownloader  from "@/components/features/TranscriptDownloader";
-import SheetMatcher           from "@/components/features/SheetMatcher";
-import StaffFilter            from "@/components/features/StaffFilter";
-import AnalyticsDashboard     from "@/components/features/analytics/AnalyticsDashboard";
+import UploadZone        from "@/components/features/UploadZone";
+import StaffPanel        from "@/components/features/StaffPanel";
+import ResultsTable      from "@/components/features/ResultsTable";
+import SheetMatcher      from "@/components/features/SheetMatcher";
+import StaffFilter       from "@/components/features/StaffFilter";
+import AnalyticsDashboard from "@/components/features/analytics/AnalyticsDashboard";
+import ChannelSelector   from "@/components/features/ChannelSelector";
+import SessionsPanel     from "@/components/features/SessionsPanel";
 
 const SALARY_STEPS = [
   { n: 1, label: "Upload file" },
@@ -21,45 +28,252 @@ const SALARY_STEPS = [
 ];
 
 type Tab = "salary" | "match" | "filter";
-type SalarySubTab = "calc" | "analytics";
+type SalarySubTab = "calc" | "history" | "analytics";
 
 const DEFAULT_WEIGHTS: Record<string, number> = Object.fromEntries(
   GROUPS.map((g) => [g.key, g.weight])
 );
 
+// ── Save-session modal ────────────────────────────────────────────────────────
+
+function SaveSessionModal({
+  defaultName,
+  onConfirm,
+  onClose,
+}: {
+  defaultName: string;
+  onConfirm: (name: string) => void;
+  onClose: () => void;
+}) {
+  const [name, setName] = useState(defaultName);
+  return (
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-surface-1 rounded-2xl shadow-xl w-full max-w-sm p-6" onClick={e => e.stopPropagation()}>
+        <h2 className="text-lg font-bold text-ink mb-1">Lưu tháng này</h2>
+        <p className="text-sm text-ink-muted mb-4">
+          Đặt tên cho dữ liệu tháng này để dễ nhận biết sau.
+        </p>
+        <input
+          autoFocus
+          value={name}
+          onChange={e => setName(e.target.value)}
+          onKeyDown={e => e.key === "Enter" && name.trim() && onConfirm(name.trim())}
+          placeholder="Tên tháng..."
+          className="input w-full mb-4"
+        />
+        <div className="flex gap-2 justify-end">
+          <button onClick={onClose} className="btn-ghost">Hủy</button>
+          <button
+            onClick={() => name.trim() && onConfirm(name.trim())}
+            disabled={!name.trim()}
+            className="btn-primary disabled:opacity-40"
+          >
+            Lưu
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── App ───────────────────────────────────────────────────────────────────────
+
 export default function App() {
-  const [tab,         setTab]         = useState<Tab>("salary");
+  const [tab,          setTab]          = useState<Tab>("salary");
   const [salarySubTab, setSalarySubTab] = useState<SalarySubTab>("calc");
+  const [showSaveModal, setShowSaveModal] = useState(false);
+
+  // ── Channels & sessions (stored separately) ─────────────────────────────────
+  const [channels, setChannels] = useState<Channel[]>(() => loadChannels());
+  const [sessions, setSessions] = useState<MonthSession[]>(() => loadSessions());
+
+  // ── Working session (current upload / 3-step flow) ───────────────────────────
   const [state, setState] = useState<AppState>(() => {
-    const saved = loadSession();
-    if (saved) return { ...saved, weights: { ...DEFAULT_WEIGHTS, ...saved.weights } };
-    return { ...INITIAL_STATE, weights: DEFAULT_WEIGHTS };
+    const saved = loadSession() as (AppState & { history?: unknown[] }) | null;
+    if (!saved) return { ...INITIAL_STATE, weights: DEFAULT_WEIGHTS };
+
+    // Migrate old history if present
+    if (saved.history && saved.history.length > 0) {
+      const existing = loadSessions();
+      const existingChannels = loadChannels();
+      const { channels: migratedChannels, sessions: migratedSessions, activeChannelId } =
+        migrateFromOldState(saved as Parameters<typeof migrateFromOldState>[0], existingChannels, existing);
+      saveChannels(migratedChannels);
+      saveSessions(migratedSessions);
+      setChannels(migratedChannels);
+      setSessions(migratedSessions);
+      const withChannel: AppState = {
+        ...saved,
+        activeChannelId: saved.activeChannelId ?? activeChannelId,
+        weights: { ...DEFAULT_WEIGHTS, ...saved.weights },
+      };
+      delete (withChannel as AppState & { history?: unknown }).history;
+      return withChannel;
+    }
+
+    return {
+      ...saved,
+      activeChannelId: saved.activeChannelId ?? null,
+      weights: { ...DEFAULT_WEIGHTS, ...saved.weights },
+    };
   });
 
+  // Auto-save AppState on change
   useEffect(() => { saveSession(state); }, [state]);
+  // Auto-save channels/sessions on change
+  useEffect(() => { saveChannels(channels); }, [channels]);
+  useEffect(() => { saveSessions(sessions); }, [sessions]);
+
+  // Ensure at least one channel exists on first run
+  useEffect(() => {
+    if (channels.length === 0) {
+      const defaultChannel: Channel = {
+        id: crypto.randomUUID(),
+        name: "Kênh mặc định",
+        createdAt: Date.now(),
+      };
+      setChannels([defaultChannel]);
+      if (!state.activeChannelId) {
+        setState(prev => ({ ...prev, activeChannelId: defaultChannel.id }));
+      }
+    } else if (!state.activeChannelId) {
+      setState(prev => ({ ...prev, activeChannelId: channels[0].id }));
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const patch = useCallback((partial: Partial<AppState>) => {
-    setState((prev) => ({ ...prev, ...partial }));
+    setState(prev => ({ ...prev, ...partial }));
   }, []);
+
+  // ── Channel management ───────────────────────────────────────────────────────
+
+  const handleCreateChannel = (name: string) => {
+    const channel: Channel = { id: crypto.randomUUID(), name, createdAt: Date.now() };
+    setChannels(prev => [...prev, channel]);
+    setState(prev => ({ ...prev, activeChannelId: channel.id }));
+  };
+
+  const handleRenameChannel = (id: string, name: string) => {
+    setChannels(prev => prev.map(c => c.id === id ? { ...c, name } : c));
+  };
+
+  const handleDeleteChannel = (id: string) => {
+    setSessions(prev => prev.filter(s => s.channelId !== id));
+    setChannels(prev => {
+      const next = prev.filter(c => c.id !== id);
+      if (state.activeChannelId === id) {
+        const fallback = next[0]?.id ?? null;
+        setState(p => ({ ...p, activeChannelId: fallback }));
+      }
+      return next;
+    });
+  };
+
+  const handleSelectChannel = (id: string) => {
+    setState(prev => ({ ...prev, activeChannelId: id }));
+  };
+
+  // ── Session management ───────────────────────────────────────────────────────
+
+  const activeChannel = channels.find(c => c.id === state.activeChannelId) ?? null;
+  const channelSessions = useMemo(
+    () => state.activeChannelId ? getChannelSessions(sessions, state.activeChannelId) : [],
+    [sessions, state.activeChannelId],
+  );
+
+  const handleSaveSession = (name: string) => {
+    if (!state.activeChannelId) return;
+    // Parse period from session name first; fall back to derivePeriod; fall back to current month
+    const now = new Date();
+    const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+    const period = parsePeriodFromName(name) || derivePeriod(state.videos) || currentMonth;
+    const label  = periodLabel(period);
+    // displayOrder = max existing + 1 so new sessions appear newest (rightmost on chart)
+    const maxOrder = channelSessions.reduce((m, s) => Math.max(m, s.displayOrder ?? s.savedAt), 0);
+    const newSession: MonthSession = {
+      id:               crypto.randomUUID(),
+      channelId:        state.activeChannelId,
+      name,
+      period,
+      label,
+      videos:           state.videos,
+      staffList:        state.staffList,
+      weights:          state.weights,
+      detectedOptional: state.detectedOptional,
+      savedAt:          Date.now(),
+      displayOrder:     maxOrder + 1,
+    };
+    setSessions(prev => upsertSession(prev, newSession));
+    setShowSaveModal(false);
+    setSalarySubTab("history");
+  };
+
+  const handleDeleteSession = (id: string) => {
+    setSessions(prev => deleteSession(prev, id));
+  };
+
+  const handleReorderSessions = (orderedIds: string[]) => {
+    if (!state.activeChannelId) return;
+    setSessions(prev => reorderSessions(prev, state.activeChannelId!, orderedIds));
+  };
+
+  const handleRenameSession = (id: string, name: string) => {
+    setSessions(prev => prev.map(s => s.id === id ? { ...s, name } : s));
+  };
+
+  const handleLoadSession = (session: MonthSession) => {
+    setState(prev => ({
+      ...INITIAL_STATE,
+      activeChannelId:  prev.activeChannelId,
+      step:             3,
+      videos:           session.videos,
+      staffList:        session.staffList,
+      weights:          session.weights,
+      detectedOptional: session.detectedOptional,
+    }));
+    setSalarySubTab("calc");
+  };
+
+  // ── Upload flow ───────────────────────────────────────────────────────────────
 
   const handleUpload = (videos: VideoRow[], detectedOptional: OptionalColumnKey[]) => {
     clearSession();
-    setState({ ...INITIAL_STATE, step: 2, videos, detectedOptional, staffList: [], weights: DEFAULT_WEIGHTS });
+    setState(prev => ({
+      ...INITIAL_STATE,
+      activeChannelId: prev.activeChannelId,
+      step: 2,
+      videos,
+      detectedOptional,
+      staffList: [],
+      weights: DEFAULT_WEIGHTS,
+    }));
   };
 
   const handleNewSession = () => {
     clearSession();
-    setState({ ...INITIAL_STATE, weights: DEFAULT_WEIGHTS });
+    setState(prev => ({ ...INITIAL_STATE, activeChannelId: prev.activeChannelId, weights: DEFAULT_WEIGHTS }));
   };
 
-  // Distinct periods available in the uploaded videos (for analytics tab gate)
-  const analyticsPeriods = useMemo(() => getDistinctPeriods(state.videos), [state.videos]);
+  // ── Analytics ─────────────────────────────────────────────────────────────────
+
+  // Analytics available as soon as 1 session is saved (Trend will warn internally if < 2)
+  const analyticsAvailable = channelSessions.length >= 1;
+
+  // ── Results ───────────────────────────────────────────────────────────────────
 
   const results = state.step === 3
     ? computeAttribution(state.videos, state.staffList, state.weights)
     : [];
 
   const totalWeight = Object.values(state.weights).reduce((s, v) => s + v, 0);
+
+  // ── Default save-session name ─────────────────────────────────────────────────
+
+  const defaultSaveName = useMemo(() => {
+    const p = derivePeriod(state.videos);
+    return periodLabel(p);
+  }, [state.videos]);
 
   return (
     <div className="min-h-screen bg-surface">
@@ -74,7 +288,17 @@ export default function App() {
           <span className="text-lg font-bold text-ink">Views Tracker</span>
         </div>
 
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3">
+          {/* Channel selector */}
+          <ChannelSelector
+            channels={channels}
+            activeChannelId={state.activeChannelId}
+            onSelect={handleSelectChannel}
+            onCreate={handleCreateChannel}
+            onRename={handleRenameChannel}
+            onDelete={handleDeleteChannel}
+          />
+
           {tab === "salary" && salarySubTab === "calc" && (
             <div className="flex items-center gap-2">
               {GROUPS.map((g) => {
@@ -114,17 +338,7 @@ export default function App() {
             📊 Tính views
           </button>
 
-          {/* Tab: Transcript */}
-          {/* <button
-            onClick={() => setTab("transcript")}
-            className={`flex items-center gap-2 py-3.5 px-4 text-sm font-semibold border-b-2 transition-all ${
-              tab === "transcript" ? "border-accent text-accent" : "border-transparent text-ink-tertiary hover:text-ink"
-            }`}
-          >
-            📝 Transcript
-          </button> */}
-
-          {/* Tab: Tìm My Video ID */}
+          {/* Tab: Match */}
           <button
             onClick={() => setTab("match")}
             className={`flex items-center gap-2 py-3.5 px-4 text-sm font-semibold border-b-2 transition-all mr-1 ${
@@ -144,7 +358,7 @@ export default function App() {
             🔍 Lọc Video ID
           </button>
 
-          {/* Salary step indicators (only when on salary tab, calc sub-tab) */}
+          {/* Salary step indicators */}
           {tab === "salary" && salarySubTab === "calc" && (
             <div className="flex items-center gap-1 ml-2 border-l border-border pl-4">
               {SALARY_STEPS.map((s, i) => {
@@ -180,7 +394,6 @@ export default function App() {
 
       {/* Content */}
       <main className="max-w-7xl mx-auto px-6 py-10 animate-in">
-        {/* {tab === "transcript" && <TranscriptDownloader />} */}
         {tab === "match"  && <SheetMatcher />}
         {tab === "filter" && <StaffFilter />}
 
@@ -197,35 +410,62 @@ export default function App() {
                 📊 Tính views
               </button>
 
+              <button
+                onClick={() => setSalarySubTab("history")}
+                className={`flex items-center gap-2 py-2.5 px-4 text-sm font-semibold border-b-2 transition-all -mb-px ${
+                  salarySubTab === "history" ? "border-accent text-accent" : "border-transparent text-ink-tertiary hover:text-ink"
+                }`}
+              >
+                📋 Lịch sử
+                {channelSessions.length > 0 && (
+                  <span className="text-xs bg-surface-2 text-ink-muted px-1.5 py-0.5 rounded-full">
+                    {channelSessions.length}
+                  </span>
+                )}
+              </button>
+
               <div className="relative group">
                 <button
-                  onClick={() => analyticsPeriods.length >= 2 && setSalarySubTab("analytics")}
+                  onClick={() => analyticsAvailable && setSalarySubTab("analytics")}
                   className={`flex items-center gap-2 py-2.5 px-4 text-sm font-semibold border-b-2 transition-all -mb-px ${
                     salarySubTab === "analytics"
                       ? "border-accent text-accent"
-                      : analyticsPeriods.length >= 2
+                      : analyticsAvailable
                       ? "border-transparent text-ink-tertiary hover:text-ink"
                       : "border-transparent text-ink-muted cursor-not-allowed"
                   }`}
                 >
                   📈 Analytics
-                  {analyticsPeriods.length > 0 && (
+                  {channelSessions.length > 0 && (
                     <span className="text-xs bg-surface-2 text-ink-muted px-1.5 py-0.5 rounded-full">
-                      {analyticsPeriods.length}T
+                      {channelSessions.length}T
                     </span>
                   )}
                 </button>
-                {analyticsPeriods.length < 2 && (
-                  <div className="absolute top-full left-1/2 -translate-x-1/2 mt-1 hidden group-hover:block z-20 w-56 bg-ink text-white text-xs rounded-lg px-3 py-2 shadow-lg pointer-events-none">
-                    Cần ≥ 2 tháng. Upload file YouTube Analytics có cột "Thời gian xuất bản video".
+                {!analyticsAvailable && (
+                  <div className="absolute top-full left-1/2 -translate-x-1/2 mt-1 hidden group-hover:block z-20 w-60 bg-ink text-white text-xs rounded-lg px-3 py-2 shadow-lg pointer-events-none">
+                    Cần ít nhất 1 tháng đã lưu trong tab Lịch sử.
                   </div>
                 )}
               </div>
             </div>
 
+            {/* Calc sub-tab */}
             {salarySubTab === "calc" && (
               <>
-                {state.step === 1 && <UploadZone onSuccess={handleUpload} />}
+                {state.step === 1 && (
+                  !activeChannel ? (
+                    <div className="card p-12 text-center max-w-md mx-auto">
+                      <p className="text-3xl mb-3">📺</p>
+                      <h3 className="text-lg font-bold text-ink mb-2">Chọn kênh trước</h3>
+                      <p className="text-sm text-ink-muted">
+                        Tạo hoặc chọn kênh YouTube bằng dropdown ở góc trên bên phải.
+                      </p>
+                    </div>
+                  ) : (
+                    <UploadZone onSuccess={handleUpload} />
+                  )
+                )}
                 {state.step === 2 && (
                   <StaffPanel
                     staffList={state.staffList} videos={state.videos} weights={state.weights}
@@ -243,21 +483,49 @@ export default function App() {
                     detectedOptional={state.detectedOptional}
                     onBack={() => patch({ step: 2 })}
                     onNewSession={handleNewSession}
+                    onSaveSession={activeChannel ? () => setShowSaveModal(true) : undefined}
                   />
                 )}
               </>
             )}
 
-            {salarySubTab === "analytics" && (
-              <AnalyticsDashboard
-                videos={state.videos}
-                staffList={state.staffList}
-                weights={state.weights}
+            {/* History sub-tab */}
+            {salarySubTab === "history" && activeChannel && (
+              <SessionsPanel
+                channel={activeChannel}
+                sessions={channelSessions}
+                onLoad={handleLoadSession}
+                onRename={handleRenameSession}
+                onDelete={handleDeleteSession}
+                onReorder={handleReorderSessions}
+                onStartNewUpload={() => {
+                  handleNewSession();
+                  setSalarySubTab("calc");
+                }}
               />
+            )}
+            {salarySubTab === "history" && !activeChannel && (
+              <div className="card p-12 text-center max-w-md mx-auto">
+                <p className="text-sm text-ink-muted">Chọn kênh để xem lịch sử.</p>
+              </div>
+            )}
+
+            {/* Analytics sub-tab */}
+            {salarySubTab === "analytics" && (
+              <AnalyticsDashboard sessions={channelSessions} />
             )}
           </>
         )}
       </main>
+
+      {/* Save session modal */}
+      {showSaveModal && (
+        <SaveSessionModal
+          defaultName={defaultSaveName}
+          onConfirm={handleSaveSession}
+          onClose={() => setShowSaveModal(false)}
+        />
+      )}
     </div>
   );
 }

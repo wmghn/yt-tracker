@@ -12,9 +12,10 @@ interface Props {
   detectedOptional: OptionalColumnKey[];
   onBack:           () => void;
   onNewSession:     () => void;
+  onSaveSession?:   () => void;
 }
 
-export default function ResultsTable({ results, videos, weights, detectedOptional, onBack, onNewSession }: Props) {
+export default function ResultsTable({ results, videos, weights, detectedOptional, onBack, onNewSession, onSaveSession }: Props) {
   const [expandedId,        setExpandedId]        = useState<string | null>(null);
   const [showExport,        setShowExport]         = useState(false);
   const [countFilter,       setCountFilter]        = useState<number | null>(null);
@@ -95,6 +96,11 @@ export default function ResultsTable({ results, videos, weights, detectedOptiona
         <div className="flex gap-3 mt-1">
           <button onClick={onBack} className="btn-ghost btn-sm">← Sửa</button>
           <button onClick={onNewSession} className="btn-ghost btn-sm">↺ Tính views mới</button>
+          {onSaveSession && (
+            <button onClick={onSaveSession} className="btn-ghost btn-sm text-accent font-semibold border border-accent/30 hover:bg-accent/5">
+              💾 Lưu tháng này
+            </button>
+          )}
           <button onClick={() => setShowExport(true)} className="btn-primary btn-sm px-5">↓ Export Excel</button>
         </div>
       </div>

@@ -1,21 +1,10 @@
 import { useState, useMemo } from "react";
-import type { StaffPeriodMetrics, StaffTrend, TrendLabel } from "@/lib/services/analytics";
+import type { StaffPeriodMetrics, StaffTrend } from "@/lib/services/analytics";
 
 interface Props {
   allMetrics: StaffPeriodMetrics[];
   trends:     StaffTrend[];
 }
-
-type TrendLabel_ = TrendLabel;
-
-const TREND_CONFIG: Record<TrendLabel_, { label: string; badge: string; icon: string }> = {
-  rising_strong:     { label: "Tăng mạnh",   badge: "bg-emerald-100 text-emerald-700 border-emerald-200", icon: "↑↑" },
-  rising:            { label: "Tăng",         badge: "bg-green-50 text-green-600 border-green-200",        icon: "↑"  },
-  stable:            { label: "Ổn định",      badge: "bg-slate-100 text-slate-600 border-slate-200",       icon: "→"  },
-  declining:         { label: "Giảm",         badge: "bg-amber-50 text-amber-600 border-amber-200",        icon: "↓"  },
-  declining_severe:  { label: "Giảm mạnh",    badge: "bg-red-50 text-red-600 border-red-200",              icon: "↓↓" },
-  insufficient_data: { label: "–",            badge: "bg-slate-50 text-slate-400 border-slate-200",        icon: "–"  },
-};
 
 interface AggStaff {
   staffName:        string;
@@ -25,7 +14,6 @@ interface AggStaff {
   totalWatchTime:   number;
   totalRevenue:     number;
   totalSubscribers: number;
-  trendLabel:       TrendLabel_;
 }
 
 function fmt(n: number): string {
@@ -109,12 +97,10 @@ function StaffTable({ members, hasRevenue, hasWatch }: {
                 <span className="ml-1 normal-case font-medium text-[10px] px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-500 border border-slate-200">tổng</span>
               </th>
             )}
-            <th className="px-4 pr-5 py-3 text-left text-xs font-bold text-ink-tertiary uppercase tracking-wide whitespace-nowrap">Xu hướng</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-border">
           {sorted.map((m, i) => {
-            const trend      = TREND_CONFIG[m.trendLabel];
             const viewsPct   = sumViews   > 0 ? (m.totalViews        / sumViews)   * 100 : 0;
             const watchPct_  = sumWatch   > 0 ? (m.totalWatchTime    / sumWatch)   * 100 : 0;
             const revPct     = sumRevenue > 0 ? (m.totalRevenue      / sumRevenue) * 100 : 0;
@@ -181,11 +167,6 @@ function StaffTable({ members, hasRevenue, hasWatch }: {
                     ) : <span className="text-xs text-ink-muted">—</span>}
                   </td>
                 )}
-                <td className="px-4 pr-5 py-3">
-                  <span className={`text-xs font-bold px-2 py-0.5 rounded-full border whitespace-nowrap ${trend.badge}`}>
-                    {trend.icon} {trend.label}
-                  </span>
-                </td>
               </tr>
             );
           })}
@@ -220,7 +201,6 @@ function StaffTable({ members, hasRevenue, hasWatch }: {
                 </span>
               </td>
             )}
-            <td />
           </tr>
         </tfoot>
       </table>
@@ -229,20 +209,14 @@ function StaffTable({ members, hasRevenue, hasWatch }: {
 }
 
 // ── Main ─────────────────────────────────────────────────────────────────────
-export default function OverviewTab({ allMetrics, trends }: Props) {
-  const trendMap = useMemo(() => {
-    const m = new Map<string, TrendLabel_>();
-    for (const t of trends) m.set(`${t.staffName}::${t.role}`, t.label);
-    return m;
-  }, [trends]);
-
+export default function OverviewTab({ allMetrics }: Omit<Props, "trends">) {
   // Aggregate per staff across all periods
   const aggregated = useMemo(() => {
     const map = new Map<string, AggStaff>();
     for (const m of allMetrics) {
       const key = `${m.staffName}::${m.role}`;
       if (!map.has(key)) {
-        map.set(key, { staffName: m.staffName, role: m.role, videoCount: 0, totalViews: 0, totalWatchTime: 0, totalRevenue: 0, totalSubscribers: 0, trendLabel: "insufficient_data" });
+        map.set(key, { staffName: m.staffName, role: m.role, videoCount: 0, totalViews: 0, totalWatchTime: 0, totalRevenue: 0, totalSubscribers: 0 });
       }
       const agg = map.get(key)!;
       agg.videoCount       += m.videoCount;
@@ -251,11 +225,8 @@ export default function OverviewTab({ allMetrics, trends }: Props) {
       agg.totalRevenue     += m.totalRevenue;
       agg.totalSubscribers += m.totalSubscribers;
     }
-    for (const [key, agg] of map) {
-      agg.trendLabel = trendMap.get(key) ?? "insufficient_data";
-    }
     return Array.from(map.values());
-  }, [allMetrics, trendMap]);
+  }, [allMetrics]);
 
   // Group by role (preserve insertion order = sorted by first occurrence)
   const byRole = useMemo(() => {

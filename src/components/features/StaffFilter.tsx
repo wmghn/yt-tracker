@@ -158,7 +158,7 @@ export default function StaffFilter() {
           <p className="text-base font-semibold text-ink mb-1">Upload file Excel</p>
           <p className="text-sm text-ink-muted mb-4">File .xlsx hoặc .csv từ Google Sheet</p>
           <p className="text-xs text-ink-tertiary">
-            Cần có cột: <strong>Video ID</strong> + <strong>Tên Người Làm</strong>
+            Cần có cột: <strong>My Video ID</strong> + <strong>Tên Người Làm</strong>
           </p>
           <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleFileInput} />
         </div>

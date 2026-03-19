@@ -28,32 +28,45 @@ export interface StaffMember {
 export type OptionalColumnKey = "publishedAt" | "duration" | "watchTime" | "subscribers" | "revenue" | "ctr" | "impressions";
 export type ExportOptionalColumn = OptionalColumnKey;
 
+/** A YouTube channel managed by the user */
+export interface Channel {
+  id:        string;
+  name:      string;
+  createdAt: number;
+}
+
+/** A saved monthly data snapshot for one channel */
 export interface MonthSession {
-  period:    string;
-  label:     string;
-  videos:    VideoRow[];
-  staffList: StaffMember[];
-  weights:   Record<string, number>;
-  savedAt:   number;
+  id:               string;         // UUID
+  channelId:        string;         // which channel this belongs to
+  name:             string;         // user-editable label, e.g. "Tháng 3/2026"
+  period:           string;         // "2026-03" — derived from data (may be inaccurate for old sessions)
+  label:            string;         // "Tháng 3/2026" — derived from period
+  videos:           VideoRow[];
+  staffList:        StaffMember[];
+  weights:          Record<string, number>;
+  detectedOptional: OptionalColumnKey[];
+  savedAt:          number;
+  displayOrder?:    number;         // user-defined sort order (ascending = oldest first on chart); defaults to savedAt
 }
 
 // weights: runtime overrides of GROUPS config, { "EDITOR": 60, "CONTENT": 40 }
 export interface AppState {
   step:             1 | 2 | 3;
+  activeChannelId:  string | null;
   videos:           VideoRow[];
   detectedOptional: OptionalColumnKey[];
   staffList:        StaffMember[];
   weights:          Record<string, number>;
-  history:          MonthSession[];
 }
 
 export const INITIAL_STATE: AppState = {
   step:             1,
+  activeChannelId:  null,
   videos:           [],
   detectedOptional: [],
   staffList:        [],
   weights:          {},   // populated on upload from GROUPS defaults
-  history:          [],
 };
 
 export interface VideoBreakdown {

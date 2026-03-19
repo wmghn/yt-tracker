@@ -1,4 +1,4 @@
-import type { VideoRow, StaffMember } from "@/types";
+import type { VideoRow, StaffMember, MonthSession } from "@/types";
 
 export interface StaffPeriodMetrics {
   staffName:         string;
@@ -225,6 +225,132 @@ function trendLabel(score: number): TrendLabel {
   if (score >= 0.8) return "stable";
   if (score >= 0.6) return "declining";
   return "declining_severe";
+}
+
+/**
+ * Try to parse a YYYY-MM period string from a human-readable session name.
+ * Handles: "Tháng 2/2026", "T2/2026", "2/2026", "2026-02"
+ */
+export function parsePeriodFromName(name: string): string {
+  const m1 = name.match(/(?:tháng\s*|t)(\d{1,2})[\/\-](\d{4})/i);
+  if (m1) {
+    const mo = parseInt(m1[1]), yr = parseInt(m1[2]);
+    if (mo >= 1 && mo <= 12 && yr >= 2000) return `${yr}-${String(mo).padStart(2, "0")}`;
+  }
+  const m2 = name.match(/(\d{1,2})[\/\-](\d{4})/);
+  if (m2) {
+    const mo = parseInt(m2[1]), yr = parseInt(m2[2]);
+    if (mo >= 1 && mo <= 12 && yr >= 2000) return `${yr}-${String(mo).padStart(2, "0")}`;
+  }
+  const m3 = name.match(/(\d{4})[\/\-](\d{2})/);
+  if (m3) return `${m3[1]}-${m3[2]}`;
+  return "";
+}
+
+/**
+ * Compute StaffPeriodMetrics for one session, treating the whole session as a
+ * single data point. Does NOT use publishedMonth at all — sums all videos the
+ * staff member is assigned to in that session.
+ *
+ * @param sortKey  A unique, chronologically-sortable string used as the internal
+ *                 period key (e.g. zero-padded index "000002"). Alphabetical sort
+ *                 of sortKeys gives correct chronological order on the chart.
+ */
+function computeSingleSessionMetrics(session: MonthSession, sortKey: string): StaffPeriodMetrics[] {
+  const { videos, staffList, weights, name } = session;
+  const period = sortKey; // internal key — NOT the YYYY-MM period
+  const videoIndex = new Map<string, VideoRow>(videos.map(v => [v.youtubeId, v]));
+  const channelAvg = videos.length > 0 ? videos.reduce((s, v) => s + v.views, 0) / videos.length : 0;
+
+  // Per-video: count members per role
+  const groupCount = new Map<string, Record<string, number>>();
+  for (const staff of staffList) {
+    for (const vid of staff.videoIds) {
+      if (!videoIndex.has(vid)) continue;
+      const counts = groupCount.get(vid) ?? {};
+      counts[staff.role] = (counts[staff.role] ?? 0) + 1;
+      groupCount.set(vid, counts);
+    }
+  }
+
+  const result: StaffPeriodMetrics[] = [];
+
+  for (const staff of staffList) {
+    const staffVids = staff.videoIds.filter(id => videoIndex.has(id));
+    if (staffVids.length === 0) continue;
+
+    const weight = (weights[staff.role] ?? 0) / 100;
+    let weightedViews = 0, totalWatchTime = 0, watchRatioSum = 0, watchRatioCount = 0;
+    let totalCtr = 0, ctrCount = 0, totalRevenue = 0, totalSubscribers = 0;
+    let viralCount = 0, underCount = 0;
+
+    for (const vid of staffVids) {
+      const v = videoIndex.get(vid)!;
+      const members = groupCount.get(vid)?.[staff.role] ?? 1;
+      const earned  = Math.round(v.views * weight / members);
+      weightedViews += earned;
+
+      if (v.watchTime !== undefined) {
+        totalWatchTime += v.watchTime;
+        if (v.duration && v.duration > 0 && v.views > 0) {
+          const ratio = v.watchTime / (v.views * (v.duration / 3600));
+          watchRatioSum += Math.min(ratio, 1);
+          watchRatioCount++;
+        }
+      }
+      if (v.ctr !== undefined) { totalCtr += v.ctr; ctrCount++; }
+      if (v.revenue     !== undefined) totalRevenue     += v.revenue * weight / members;
+      if (v.subscribers !== undefined) totalSubscribers += v.subscribers;
+
+      if (channelAvg > 0) {
+        if (v.views >= channelAvg * 2) viralCount++;
+        else if (v.views < channelAvg * 0.5) underCount++;
+      }
+    }
+
+    const videoCount = staffVids.length;
+    result.push({
+      staffName:         staff.name,
+      role:              staff.role,
+      period,
+      label:             name,   // ← session name, not derived from period
+      videoCount,
+      weightedViews,
+      avgViewsPerVideo:  videoCount ? Math.round(weightedViews / videoCount) : 0,
+      totalWatchTime:    Math.round(totalWatchTime * 10) / 10,
+      avgWatchTimeRatio: watchRatioCount ? Math.round((watchRatioSum / watchRatioCount) * 100) / 100 : 0,
+      avgCtr:            ctrCount ? Math.round((totalCtr / ctrCount) * 100) / 100 : 0,
+      totalRevenue:      Math.round(totalRevenue * 100) / 100,
+      revenuePerVideo:   videoCount ? Math.round((totalRevenue / videoCount) * 100) / 100 : 0,
+      totalSubscribers,
+      viralCount,
+      underCount,
+    });
+  }
+
+  return result.sort((a, b) => b.weightedViews - a.weightedViews);
+}
+
+/**
+ * Compute metrics from a list of saved sessions.
+ * Each session = exactly one X-axis data point.
+ * Sessions must be passed sorted oldest→newest (ascending displayOrder).
+ * Uses a zero-padded index as the internal period key to guarantee uniqueness
+ * and correct chronological ordering on the chart.
+ */
+export function computeMetricsFromSessions(sessions: MonthSession[]): StaffPeriodMetrics[] {
+  return sessions.flatMap((s, i) => {
+    // sortKey: zero-padded index → alphabetical sort = chronological order
+    const sortKey = String(i).padStart(6, "0");
+    return computeSingleSessionMetrics(s, sortKey);
+  });
+}
+
+/** Count of distinct sessions — used to gate Analytics tab (needs ≥ 1). */
+export function getDistinctPeriodsFromSessions(sessions: MonthSession[]): string[] {
+  // Return one entry per session (by id) so the count equals session count,
+  // not the number of unique YYYY-MM periods (which can collide).
+  return sessions.map(s => s.id);
 }
 
 export function computeRankings(metrics: StaffPeriodMetrics[], period: string): StaffRank[] {
