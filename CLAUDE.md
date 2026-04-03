@@ -1827,13 +1827,35 @@ Row 3+ →  Data rows
 | K | Tên Người Làm | Staff names — **multiple per cell**, newline or space separated |
 | T | NGÀY ĐĂNG | Publish date |
 
+### Multi-sheet support & parse modes
+
+The parser accepts a `mode` parameter (`StaffSheetMode`) that controls which sheets are read:
+
+| Mode | Description | Sheets read |
+|---|---|---|
+| `"tien-do"` (default) | File Tiến Độ Công Việc gốc từ Google Sheet | Only sheets whose name contains **"work progress"** or **"live stream"** / **"livestream"** (case-insensitive). Other sheets are ignored. |
+| `"staff-export"` | File đã export từ Lọc Video ID | Only the **first sheet**. |
+
+All matching sheets must have the same column format (Video ID + Tên Người Làm).
+Rows are merged across sheets with **videoId deduplication** (first sheet wins on duplicates).
+
+### StaffPanel import UI
+
+The import zone in StaffPanel (Step 2) has **two tabs**:
+
+- **📋 File Tiến Độ Công Việc** — uses mode `"tien-do"`, reads Work Progress + Live Stream sheets
+- **📄 Staff Video IDs** — uses mode `"staff-export"`, reads first sheet only (tries export format first, then raw format as fallback)
+
+When importing, if a staff member with the same name already exists, their video IDs are **overridden** with the new data from the import file.
+
 ### Key characteristics
 
-- **Video ID column (C):** May be empty for some rows — those rows are skipped.
-- **Staff column (K):** Contains multiple names in one cell. Names are separated by
-  newlines (`\n`), and each name may have a role prefix like `CT `, `ED `.
+- **Video ID column (C or D):** May be empty for some rows — those rows are skipped.
+- **Staff column (K or L):** Contains multiple names in one cell. Names are separated by
+  newlines (`\n`), commas, or semicolons, and each name may have a role prefix like `CT `, `ED `.
   Example cell value: `"CT Minh Anh\nED Tuân 95"` or `"CT Tuyên\nED Hoàng"`.
-- **Header row:** Row 2 (index 1 in 0-based arrays). Data starts row 3 (index 2).
+- **Header row:** Detected automatically in the first 5 rows by scanning for both
+  "Video ID" and "Tên Người Làm" column aliases. Data starts from the row after headers.
 
 ### Column detection strategy
 
@@ -1913,70 +1935,76 @@ function findColIndex(headerRow: string[], aliases: readonly string[]): number {
   return -1;
 }
 
-export function parseStaffSheet(buffer: ArrayBuffer): StaffSheetParseResult {
-  try {
-    const wb  = XLSX.read(buffer, { type: "array" });
-    const ws  = wb.Sheets[wb.SheetNames[0]];
-    const raw = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1 });
+// ── Sheet filtering by mode ───────────────────────────────────────────────────
 
-    if (raw.length < 2) {
-      return { success: false, error: "File has fewer than 2 rows." };
+export type StaffSheetMode = "staff-export" | "tien-do";
+
+const TIEN_DO_SHEET_KEYWORDS = ["work progress", "live stream", "livestream"];
+
+function isAllowedSheet(sheetName: string, index: number, mode: StaffSheetMode): boolean {
+  if (mode === "staff-export") return index === 0;
+  // mode === "tien-do": only sheets matching keywords
+  const lower = sheetName.toLowerCase().trim();
+  return TIEN_DO_SHEET_KEYWORDS.some((kw) => lower.includes(kw));
+}
+
+// ── Multi-sheet parser ────────────────────────────────────────────────────────
+
+export function parseStaffSheet(
+  buffer: ArrayBuffer,
+  mode: StaffSheetMode = "tien-do"
+): StaffSheetParseResult {
+  try {
+    const wb = XLSX.read(buffer, { type: "array" });
+
+    const allRows:     StaffSheetRow[] = [];
+    const allStaff     = new Set<string>();
+    const existingIds  = new Set<string>();
+    let   totalSkipped = 0;
+    let   firstHeaderRow = 1;
+    let   parsedSheets = 0;
+
+    for (let i = 0; i < wb.SheetNames.length; i++) {
+      const sheetName = wb.SheetNames[i];
+      if (!isAllowedSheet(sheetName, i, mode)) continue;
+
+      const ws     = wb.Sheets[sheetName];
+      const result = parseSingleSheet(ws);
+      if (!result) continue;
+
+      parsedSheets++;
+      if (parsedSheets === 1) firstHeaderRow = result.headerRow;
+
+      for (const row of result.rows) {
+        if (!existingIds.has(row.videoId)) {
+          allRows.push(row);
+          existingIds.add(row.videoId);
+        }
+      }
+
+      result.staffSet.forEach((n) => allStaff.add(n));
+      totalSkipped += result.skipped;
     }
 
-    const headerRowIdx = detectHeaderRow(raw as unknown[][]);
-    if (headerRowIdx === -1) {
+    if (parsedSheets === 0) {
       return {
         success: false,
-        error: "Could not detect header row. Expected columns: 'Video ID' and 'Tên Người Làm' (or aliases)."
+        error: mode === "tien-do"
+          ? "Không tìm thấy sheet 'Work Progress' hoặc 'Live Stream'."
+          : "Could not detect header row.",
       };
     }
 
-    const headerRow = (raw[headerRowIdx] as unknown[])
-      .map(c => String(c ?? "").toLowerCase().trim());
-
-    const colVideoId   = findColIndex(headerRow, STAFF_SHEET_COLUMNS.videoId);
-    const colStaffName = findColIndex(headerRow, STAFF_SHEET_COLUMNS.staffName);
-    const colTitle     = findColIndex(headerRow, STAFF_SHEET_COLUMNS.title);
-    const colStatus    = findColIndex(headerRow, STAFF_SHEET_COLUMNS.status);
-    const colPublished = findColIndex(headerRow, STAFF_SHEET_COLUMNS.publishedAt);
-
-    if (colVideoId === -1)   return { success: false, error: "Column 'Video ID' not found." };
-    if (colStaffName === -1) return { success: false, error: "Column 'Tên Người Làm' not found." };
-
-    const rows:     StaffSheetRow[] = [];
-    const staffSet  = new Set<string>();
-    let   skipped   = 0;
-
-    for (let i = headerRowIdx + 1; i < raw.length; i++) {
-      const row = raw[i] as unknown[];
-      if (!row?.length) continue;
-
-      const rawId = String(row[colVideoId] ?? "").trim();
-      if (!VIDEO_ID_REGEX.test(rawId)) { skipped++; continue; }
-
-      const names = parseStaffCell(row[colStaffName]);
-      names.forEach(n => staffSet.add(n));
-
-      rows.push({
-        videoId:     rawId,
-        title:       colTitle     !== -1 ? String(row[colTitle]     ?? "").trim() : "",
-        staffNames:  names,
-        status:      colStatus    !== -1 ? String(row[colStatus]    ?? "").trim() : "",
-        publishedAt: colPublished !== -1 ? String(row[colPublished] ?? "").trim() : "",
-        rowIndex:    i + 1,
-      });
-    }
-
-    if (rows.length === 0) {
+    if (allRows.length === 0) {
       return { success: false, error: "No rows with valid Video IDs found." };
     }
 
     return {
       success:   true,
-      rows,
-      skipped,
-      allStaff:  [...staffSet].sort(),
-      headerRow: headerRowIdx + 1,
+      rows:      allRows,
+      skipped:   totalSkipped,
+      allStaff:  [...allStaff].sort(),
+      headerRow: firstHeaderRow,
     };
   } catch (e) {
     return { success: false, error: `Parse error: ${String(e)}` };

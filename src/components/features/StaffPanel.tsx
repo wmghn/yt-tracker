@@ -3,7 +3,7 @@ import * as XLSX from "xlsx";
 import { v4 as uuid } from "uuid";
 import type { StaffMember, VideoRow } from "@/types";
 import { GROUPS } from "@/config/groups";
-import { parseStaffSheet } from "@/lib/parsers/staff-sheet";
+import { parseStaffSheet, type StaffSheetMode } from "@/lib/parsers/staff-sheet";
 import { groupVideosByStaff } from "@/lib/services/staff-video-filter";
 import StaffCard from "./StaffCard";
 
@@ -32,23 +32,24 @@ export default function StaffPanel({
 }: Props) {
   const [showNew, setShowNew] = useState(staffList.length === 0);
   const importRef = useRef<HTMLInputElement>(null);
-  const [importMsg,  setImportMsg]  = useState<{ ok: boolean; text: string } | null>(null);
-  const [isDragging, setIsDragging] = useState(false);
+  const [importMsg,    setImportMsg]    = useState<{ ok: boolean; text: string } | null>(null);
+  const [isDragging,   setIsDragging]   = useState(false);
+  const [importMode,   setImportMode]   = useState<StaffSheetMode>("tien-do");
+
+  // ── Parse helpers ──────────────────────────────────────────────────────────
 
   /**
-   * Try parsing as a raw staff assignment sheet (Google Sheet with "Video ID" + "Tên Người Làm").
-   * If successful, groups videos by staff and converts to StaffMember[].
-   * Returns null if the file doesn't match this format.
+   * Parse file as a raw staff sheet (Google Sheet with "Video ID" + "Tên Người Làm").
+   * Uses the mode to decide which sheets to read.
    */
-  const tryParseRawStaffSheet = (buffer: ArrayBuffer): StaffMember[] | null => {
-    const result = parseStaffSheet(buffer);
+  const parseRawStaffFile = (buffer: ArrayBuffer, mode: StaffSheetMode): StaffMember[] | null => {
+    const result = parseStaffSheet(buffer, mode);
     if (!result.success) return null;
 
     const groups = groupVideosByStaff(result.rows);
     const imported: StaffMember[] = [];
 
     for (const group of groups) {
-      // Skip the "unassigned" group
       if (group.staffName === "— Chưa phân công") continue;
       imported.push({
         id:       uuid(),
@@ -62,10 +63,10 @@ export default function StaffPanel({
   };
 
   /**
-   * Try parsing as a StaffFilter export file (with "Tên nhân sự" + "Vai trò" + "Video IDs" columns).
-   * Returns null if the file doesn't match this format.
+   * Parse file as a StaffFilter export (with "Tên nhân sự" + "Vai trò" + "Video IDs" columns).
+   * Only reads the first sheet.
    */
-  const tryParseExportFile = (buffer: ArrayBuffer): StaffMember[] | null => {
+  const parseExportFile = (buffer: ArrayBuffer): StaffMember[] | null => {
     try {
       const wb = XLSX.read(buffer, { type: "array" });
       const sheetName = wb.SheetNames.find((n) => n.toLowerCase().includes("staff")) ?? wb.SheetNames[0];
@@ -110,19 +111,23 @@ export default function StaffPanel({
     }
   };
 
-  const processImportFile = (file: File) => {
+  // ── Import logic ───────────────────────────────────────────────────────────
+
+  const processImportFile = (file: File, mode: StaffSheetMode) => {
     const reader = new FileReader();
     reader.onload = (ev) => {
       const buffer = ev.target!.result as ArrayBuffer;
 
-      // Try raw staff sheet first (Google Sheet with "Video ID" + "Tên Người Làm")
-      // then fall back to StaffFilter export format
-      const imported = tryParseRawStaffSheet(buffer) ?? tryParseExportFile(buffer);
+      const imported = mode === "staff-export"
+        ? (parseExportFile(buffer) ?? parseRawStaffFile(buffer, "staff-export"))
+        : parseRawStaffFile(buffer, "tien-do");
 
       if (!imported || imported.length === 0) {
         setImportMsg({
           ok: false,
-          text: "Không tìm thấy dữ liệu nhân sự. File cần có cột 'Video ID' + 'Tên Người Làm', hoặc là file export từ Lọc Video ID.",
+          text: mode === "tien-do"
+            ? "Không tìm thấy sheet 'Work Progress' hoặc 'Live Stream' với cột hợp lệ."
+            : "Không tìm thấy dữ liệu nhân sự trong file.",
         });
         setTimeout(() => setImportMsg(null), 5000);
         return;
@@ -137,13 +142,12 @@ export default function StaffPanel({
         const match = importedByName.get(existing.name);
         if (match) {
           overridden++;
-          importedByName.delete(existing.name); // consumed
+          importedByName.delete(existing.name);
           return { ...existing, videoIds: match.videoIds, role: match.role };
         }
         return existing;
       });
 
-      // Add remaining (new) staff
       const newStaff = [...importedByName.values()];
       onChange([...updated, ...newStaff]);
       setShowNew(false);
@@ -164,14 +168,14 @@ export default function StaffPanel({
     const file = e.target.files?.[0];
     if (!file) return;
     e.target.value = "";
-    processImportFile(file);
+    processImportFile(file, importMode);
   };
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(false);
     const file = e.dataTransfer.files?.[0];
-    if (file) processImportFile(file);
+    if (file) processImportFile(file, importMode);
   };
 
   const handleSave = (staff: StaffMember) => {
@@ -207,30 +211,62 @@ export default function StaffPanel({
       </div>
 
       {/* --- Import zone --- */}
-      <div
-        onClick={() => importRef.current?.click()}
-        onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
-        onDragLeave={() => setIsDragging(false)}
-        onDrop={handleDrop}
-        className={`mb-6 flex items-center gap-3 px-5 py-3.5 rounded-2xl border-2 border-dashed cursor-pointer transition-all select-none ${
-          isDragging
-            ? "border-blue-400 bg-blue-50 text-blue-600"
-            : "border-border hover:border-blue-400 text-ink-muted hover:text-blue-600"
-        }`}
-      >
-        <span className="text-lg">↑</span>
-        <span className="text-sm font-medium flex-1">
-          {isDragging ? "Thả file vào đây..." : "Import file nhân sự (.xlsx/.csv) — file gốc hoặc file export đều được"}
-        </span>
-        {importMsg && (
-          <span className={`text-xs font-semibold px-2.5 py-1 rounded-full border ${
-            importMsg.ok
-              ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-              : "bg-red-50 text-red-600 border-red-200"
-          }`}>
-            {importMsg.ok ? "✓" : "✗"} {importMsg.text}
+      <div className="mb-6 card overflow-hidden">
+        {/* Mode selector tabs */}
+        <div className="flex border-b border-border">
+          {([
+            { key: "tien-do"      as StaffSheetMode, label: "📋 File Tiến Độ Công Việc", desc: "Sheet Work Progress + Live Stream" },
+            { key: "staff-export" as StaffSheetMode, label: "📄 Staff Video IDs",        desc: "File export từ Lọc Video ID" },
+          ]).map((opt) => (
+            <button
+              key={opt.key}
+              onClick={(e) => { e.stopPropagation(); setImportMode(opt.key); }}
+              className={`flex-1 px-4 py-3 text-left transition-all relative ${
+                importMode === opt.key
+                  ? "bg-white"
+                  : "bg-surface-2/60 hover:bg-surface-2 text-ink-muted"
+              }`}
+            >
+              <p className={`text-sm font-semibold ${importMode === opt.key ? "text-ink" : "text-ink-tertiary"}`}>{opt.label}</p>
+              <p className="text-[11px] text-ink-muted mt-0.5">{opt.desc}</p>
+              {importMode === opt.key && (
+                <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-accent" />
+              )}
+            </button>
+          ))}
+        </div>
+
+        {/* Upload area */}
+        <div
+          onClick={() => importRef.current?.click()}
+          onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+          onDragLeave={() => setIsDragging(false)}
+          onDrop={handleDrop}
+          className={`flex items-center gap-3 px-5 py-4 cursor-pointer transition-all select-none ${
+            isDragging
+              ? "bg-blue-50 text-blue-600"
+              : "bg-white hover:bg-surface-2/40 text-ink-muted hover:text-blue-600"
+          }`}
+        >
+          <span className="text-lg">↑</span>
+          <span className="text-sm font-medium flex-1">
+            {isDragging
+              ? "Thả file vào đây..."
+              : importMode === "tien-do"
+                ? "Upload file .xlsx — đọc sheet Work Progress + Live Stream"
+                : "Upload file .xlsx — đọc sheet đầu tiên"
+            }
           </span>
-        )}
+          {importMsg && (
+            <span className={`text-xs font-semibold px-2.5 py-1 rounded-full border ${
+              importMsg.ok
+                ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                : "bg-red-50 text-red-600 border-red-200"
+            }`}>
+              {importMsg.ok ? "✓" : "✗"} {importMsg.text}
+            </span>
+          )}
+        </div>
       </div>
       <input ref={importRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleImportFile} />
 

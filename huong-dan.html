@@ -771,12 +771,45 @@
         </div>
       </div>
 
+      <h3>Import nhân sự từ file</h3>
+      <p>
+        Thay vì thêm từng người một, bạn có thể import hàng loạt bằng cách upload file.
+        Phần import zone ở đầu trang có <strong>2 tab</strong> để chọn loại file:
+      </p>
+
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Tab</th><th>Dùng khi</th><th>Sheet được đọc</th></tr></thead>
+          <tbody>
+            <tr>
+              <td><strong>📋 File Tiến Độ Công Việc</strong></td>
+              <td>Upload trực tiếp file Google Sheet quản lý nội dung (file gốc có cột <code>Video ID</code> + <code>Tên Người Làm</code>)</td>
+              <td>Chỉ đọc sheet có tên chứa <strong>"Work Progress"</strong> hoặc <strong>"Live Stream"</strong> (không phân biệt hoa thường). Các sheet khác bị bỏ qua.</td>
+            </tr>
+            <tr>
+              <td><strong>📄 Staff Video IDs</strong></td>
+              <td>Upload file đã export từ tab Lọc Video ID (có cột <code>Tên nhân sự</code>, <code>Vai trò</code>, <code>Video IDs</code>)</td>
+              <td>Chỉ đọc sheet đầu tiên.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="callout info">
+        <div class="callout-icon">🔄</div>
+        <div class="callout-body">
+          <strong>Cập nhật khi import trùng tên</strong><br/>
+          Nếu nhân sự đã tồn tại (trùng tên), video IDs sẽ được <em>ghi đè</em> bằng dữ liệu mới từ file import.
+          Nhân sự chưa có sẽ được thêm mới.
+        </div>
+      </div>
+
       <div class="callout info">
         <div class="callout-icon">💡</div>
         <div class="callout-body">
-          <strong>Lấy Video ID nhanh từ đâu?</strong><br/>
-          Dùng tính năng <strong>🔍 Lọc Video ID</strong> để tự động trích xuất danh sách ID
-          theo từng nhân sự từ file Google Sheet quản lý nội dung. Sau đó dán thẳng vào đây.
+          <strong>Cách nhanh nhất?</strong><br/>
+          Chọn tab <strong>📋 File Tiến Độ Công Việc</strong> rồi upload thẳng file Google Sheet —
+          app tự lọc video ID theo nhân sự, đọc cả sheet Work Progress lẫn Live Stream, và import một bước.
         </div>
       </div>
 

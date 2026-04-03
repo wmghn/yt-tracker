@@ -68,72 +68,135 @@ function findColIndex(headerRow: string[], aliases: readonly string[]): number {
   return -1;
 }
 
-// ── Main parser ────────────────────────────────────────────────────────────────
+// ── Single-sheet parser (reusable) ────────────────────────────────────────────
 
-export function parseStaffSheet(buffer: ArrayBuffer): StaffSheetParseResult {
+interface SheetParseResult {
+  rows:    StaffSheetRow[];
+  skipped: number;
+  staffSet: Set<string>;
+  headerRow: number;
+}
+
+function parseSingleSheet(ws: XLSX.WorkSheet): SheetParseResult | null {
+  const raw = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1 });
+  if (raw.length < 2) return null;
+
+  const headerRowIdx = detectHeaderRow(raw as unknown[][]);
+  if (headerRowIdx === -1) return null;
+
+  const headerRow = (raw[headerRowIdx] as unknown[])
+    .map(c => String(c ?? "").toLowerCase().trim());
+
+  const colVideoId   = findColIndex(headerRow, STAFF_SHEET_COLUMNS.videoId);
+  const colStaffName = findColIndex(headerRow, STAFF_SHEET_COLUMNS.staffName);
+  const colTitle     = findColIndex(headerRow, STAFF_SHEET_COLUMNS.title);
+  const colStatus    = findColIndex(headerRow, STAFF_SHEET_COLUMNS.status);
+  const colPublished = findColIndex(headerRow, STAFF_SHEET_COLUMNS.publishedAt);
+
+  if (colVideoId === -1 || colStaffName === -1) return null;
+
+  const rows:     StaffSheetRow[] = [];
+  const staffSet  = new Set<string>();
+  let   skipped   = 0;
+
+  for (let i = headerRowIdx + 1; i < raw.length; i++) {
+    const row = raw[i] as unknown[];
+    if (!row?.length) continue;
+
+    const rawId = String(row[colVideoId] ?? "").trim();
+    if (!VIDEO_ID_REGEX.test(rawId)) { skipped++; continue; }
+
+    const names = parseStaffCell(row[colStaffName]);
+    names.forEach(n => staffSet.add(n));
+
+    rows.push({
+      videoId:     rawId,
+      title:       colTitle     !== -1 ? String(row[colTitle]     ?? "").trim() : "",
+      staffNames:  names,
+      status:      colStatus    !== -1 ? String(row[colStatus]    ?? "").trim() : "",
+      publishedAt: colPublished !== -1 ? String(row[colPublished] ?? "").trim() : "",
+      rowIndex:    i + 1,
+    });
+  }
+
+  if (rows.length === 0) return null;
+
+  return { rows, skipped, staffSet, headerRow: headerRowIdx + 1 };
+}
+
+// ── Sheet filtering by mode ───────────────────────────────────────────────────
+
+/**
+ * "staff-export"  → file đã xử lý từ Lọc Video ID — chỉ đọc sheet đầu tiên.
+ * "tien-do"       → file Tiến Độ Công Việc gốc — chỉ đọc sheet "Work Progress"
+ *                    và "Live Stream" / "Livestream" (case-insensitive).
+ */
+export type StaffSheetMode = "staff-export" | "tien-do";
+
+const TIEN_DO_SHEET_KEYWORDS = ["work progress", "live stream", "livestream"];
+
+function isAllowedSheet(sheetName: string, index: number, mode: StaffSheetMode): boolean {
+  if (mode === "staff-export") return index === 0;
+  // mode === "tien-do"
+  const lower = sheetName.toLowerCase().trim();
+  return TIEN_DO_SHEET_KEYWORDS.some((kw) => lower.includes(kw));
+}
+
+// ── Main parser ───────────────────────────────────────────────────────────────
+
+export function parseStaffSheet(buffer: ArrayBuffer, mode: StaffSheetMode = "tien-do"): StaffSheetParseResult {
   try {
-    const wb  = XLSX.read(buffer, { type: "array" });
-    const ws  = wb.Sheets[wb.SheetNames[0]];
-    const raw = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1 });
+    const wb = XLSX.read(buffer, { type: "array" });
 
-    if (raw.length < 2) {
-      return { success: false, error: "File có ít hơn 2 hàng." };
+    const allRows:     StaffSheetRow[] = [];
+    const allStaff     = new Set<string>();
+    const existingIds  = new Set<string>();
+    let   totalSkipped = 0;
+    let   firstHeaderRow = 1;
+    let   parsedSheets = 0;
+
+    for (let i = 0; i < wb.SheetNames.length; i++) {
+      const sheetName = wb.SheetNames[i];
+      if (!isAllowedSheet(sheetName, i, mode)) continue;
+
+      const ws     = wb.Sheets[sheetName];
+      const result = parseSingleSheet(ws);
+      if (!result) continue;
+
+      parsedSheets++;
+      if (parsedSheets === 1) firstHeaderRow = result.headerRow;
+
+      // Merge rows, deduplicate by videoId (first sheet wins on duplicates)
+      for (const row of result.rows) {
+        if (!existingIds.has(row.videoId)) {
+          allRows.push(row);
+          existingIds.add(row.videoId);
+        }
+      }
+
+      result.staffSet.forEach((n) => allStaff.add(n));
+      totalSkipped += result.skipped;
     }
 
-    const headerRowIdx = detectHeaderRow(raw as unknown[][]);
-    if (headerRowIdx === -1) {
+    if (parsedSheets === 0) {
       return {
         success: false,
-        error:   "Không tìm thấy hàng tiêu đề. Cần có cột 'Video ID' và 'Tên Người Làm' (hoặc tên tương đương).",
+        error: mode === "tien-do"
+          ? "Không tìm thấy sheet 'Work Progress' hoặc 'Live Stream'. Kiểm tra lại tên sheet trong file."
+          : "Không tìm thấy hàng tiêu đề. Cần có cột 'Video ID' và 'Tên Người Làm' (hoặc tên tương đương).",
       };
     }
 
-    const headerRow = (raw[headerRowIdx] as unknown[])
-      .map(c => String(c ?? "").toLowerCase().trim());
-
-    const colVideoId   = findColIndex(headerRow, STAFF_SHEET_COLUMNS.videoId);
-    const colStaffName = findColIndex(headerRow, STAFF_SHEET_COLUMNS.staffName);
-    const colTitle     = findColIndex(headerRow, STAFF_SHEET_COLUMNS.title);
-    const colStatus    = findColIndex(headerRow, STAFF_SHEET_COLUMNS.status);
-    const colPublished = findColIndex(headerRow, STAFF_SHEET_COLUMNS.publishedAt);
-
-    if (colVideoId   === -1) return { success: false, error: "Không tìm thấy cột 'Video ID'." };
-    if (colStaffName === -1) return { success: false, error: "Không tìm thấy cột 'Tên Người Làm'." };
-
-    const rows:    StaffSheetRow[] = [];
-    const staffSet = new Set<string>();
-    let   skipped  = 0;
-
-    for (let i = headerRowIdx + 1; i < raw.length; i++) {
-      const row = raw[i] as unknown[];
-      if (!row?.length) continue;
-
-      const rawId = String(row[colVideoId] ?? "").trim();
-      if (!VIDEO_ID_REGEX.test(rawId)) { skipped++; continue; }
-
-      const names = parseStaffCell(row[colStaffName]);
-      names.forEach(n => staffSet.add(n));
-
-      rows.push({
-        videoId:     rawId,
-        title:       colTitle     !== -1 ? String(row[colTitle]     ?? "").trim() : "",
-        staffNames:  names,
-        status:      colStatus    !== -1 ? String(row[colStatus]    ?? "").trim() : "",
-        publishedAt: colPublished !== -1 ? String(row[colPublished] ?? "").trim() : "",
-        rowIndex:    i + 1,
-      });
-    }
-
-    if (rows.length === 0) {
+    if (allRows.length === 0) {
       return { success: false, error: "Không tìm thấy hàng nào có Video ID hợp lệ." };
     }
 
     return {
       success:   true,
-      rows,
-      skipped,
-      allStaff:  [...staffSet].sort(),
-      headerRow: headerRowIdx + 1,
+      rows:      allRows,
+      skipped:   totalSkipped,
+      allStaff:  [...allStaff].sort(),
+      headerRow: firstHeaderRow,
     };
   } catch (e) {
     return { success: false, error: `Lỗi đọc file: ${String(e)}` };
