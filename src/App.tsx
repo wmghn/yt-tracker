@@ -421,7 +421,7 @@ export default function App() {
       </div>
 
       {/* Content */}
-      <main data-tour="upload-zone" className="max-w-7xl mx-auto px-6 py-10 animate-in">
+      <main className="max-w-7xl mx-auto px-6 py-10 animate-in">
         {tab === "match"  && <SheetMatcher />}
         {tab === "filter" && <StaffFilter />}
 
@@ -492,7 +492,9 @@ export default function App() {
                       </p>
                     </div>
                   ) : (
-                    <UploadZone onSuccess={handleUpload} />
+                    <div data-tour="upload-zone">
+                      <UploadZone onSuccess={handleUpload} />
+                    </div>
                   )
                 )}
                 {state.step === 2 && (

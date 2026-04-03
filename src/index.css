@@ -111,16 +111,6 @@
 .animate-slide-out { animation: slideOutRight 0.25s cubic-bezier(0.7, 0, 0.84, 0) forwards; }
 
 /* Tour guide spotlight */
-@keyframes tour-pulse {
-  0%, 100% { box-shadow: 0 0 0 4px rgba(59,130,246,0.25); }
-  50%      { box-shadow: 0 0 0 8px rgba(59,130,246,0.10); }
-}
-.tour-spotlight {
-  position: relative;
-  z-index: 55;
-  border-radius: 12px;
-  animation: tour-pulse 2s ease-in-out infinite;
-}
 @keyframes tour-tooltip-in {
   from { opacity: 0; transform: translateY(8px); }
   to   { opacity: 1; transform: translateY(0); }
