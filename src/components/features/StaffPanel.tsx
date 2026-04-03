@@ -3,6 +3,8 @@ import * as XLSX from "xlsx";
 import { v4 as uuid } from "uuid";
 import type { StaffMember, VideoRow } from "@/types";
 import { GROUPS } from "@/config/groups";
+import { parseStaffSheet } from "@/lib/parsers/staff-sheet";
+import { groupVideosByStaff } from "@/lib/services/staff-video-filter";
 import StaffCard from "./StaffCard";
 
 const VIDEO_ID_REGEX = /^[a-zA-Z0-9_-]{11}$/;
@@ -33,71 +35,127 @@ export default function StaffPanel({
   const [importMsg,  setImportMsg]  = useState<{ ok: boolean; text: string } | null>(null);
   const [isDragging, setIsDragging] = useState(false);
 
+  /**
+   * Try parsing as a raw staff assignment sheet (Google Sheet with "Video ID" + "Tên Người Làm").
+   * If successful, groups videos by staff and converts to StaffMember[].
+   * Returns null if the file doesn't match this format.
+   */
+  const tryParseRawStaffSheet = (buffer: ArrayBuffer): StaffMember[] | null => {
+    const result = parseStaffSheet(buffer);
+    if (!result.success) return null;
+
+    const groups = groupVideosByStaff(result.rows);
+    const imported: StaffMember[] = [];
+
+    for (const group of groups) {
+      // Skip the "unassigned" group
+      if (group.staffName === "— Chưa phân công") continue;
+      imported.push({
+        id:       uuid(),
+        name:     group.staffName,
+        role:     inferRoleFromName(group.staffName),
+        videoIds: group.videoIds,
+      });
+    }
+
+    return imported.length > 0 ? imported : null;
+  };
+
+  /**
+   * Try parsing as a StaffFilter export file (with "Tên nhân sự" + "Vai trò" + "Video IDs" columns).
+   * Returns null if the file doesn't match this format.
+   */
+  const tryParseExportFile = (buffer: ArrayBuffer): StaffMember[] | null => {
+    try {
+      const wb = XLSX.read(buffer, { type: "array" });
+      const sheetName = wb.SheetNames.find((n) => n.toLowerCase().includes("staff")) ?? wb.SheetNames[0];
+      const ws  = wb.Sheets[sheetName];
+      const raw = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1 });
+      if (raw.length < 2) return null;
+
+      const header = (raw[0] as unknown[]).map((c) => String(c ?? "").toLowerCase().trim());
+      const colName    = header.findIndex((h) => h.includes("tên nhân sự") || h === "tên");
+      const colRole    = header.findIndex((h) => h.includes("vai trò") || h === "role");
+      const colIds     = header.findIndex((h) => h.includes("video id"));
+      const nameIdx  = colName  !== -1 ? colName  : 0;
+      const roleIdx  = colRole  !== -1 ? colRole  : -1;
+      const idsIdx   = colIds   !== -1 ? colIds   : (colRole !== -1 ? 3 : 2);
+
+      const roleLabelToKey = new Map(GROUPS.map((g) => [g.label.toLowerCase(), g.key]));
+
+      const imported: StaffMember[] = [];
+      for (let i = 1; i < raw.length; i++) {
+        const row = raw[i] as unknown[];
+        if (!row?.length) continue;
+        const name = String(row[nameIdx] ?? "").trim();
+        if (!name) continue;
+
+        let role = inferRoleFromName(name);
+        if (roleIdx !== -1) {
+          const label = String(row[roleIdx] ?? "").toLowerCase().trim();
+          role = roleLabelToKey.get(label) ?? inferRoleFromName(name);
+        }
+
+        const rawIds = String(row[idsIdx] ?? "").trim();
+        const videoIds = rawIds
+          .split(/[\n\r]+/)
+          .map((s) => s.trim())
+          .filter((s) => VIDEO_ID_REGEX.test(s));
+        imported.push({ id: uuid(), name, role, videoIds });
+      }
+
+      return imported.length > 0 ? imported : null;
+    } catch {
+      return null;
+    }
+  };
+
   const processImportFile = (file: File) => {
     const reader = new FileReader();
     reader.onload = (ev) => {
-      try {
-        const wb = XLSX.read(ev.target!.result as ArrayBuffer, { type: "array" });
-        const sheetName = wb.SheetNames.find((n) => n.toLowerCase().includes("staff")) ?? wb.SheetNames[0];
-        const ws  = wb.Sheets[sheetName];
-        const raw = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1 });
-        if (raw.length < 2) throw new Error("empty");
+      const buffer = ev.target!.result as ArrayBuffer;
 
-        // Detect columns from header row
-        const header = (raw[0] as unknown[]).map((c) => String(c ?? "").toLowerCase().trim());
-        const colName    = header.findIndex((h) => h.includes("tên nhân sự") || h === "tên");
-        const colRole    = header.findIndex((h) => h.includes("vai trò") || h === "role");
-        const colIds     = header.findIndex((h) => h.includes("video id"));
-        // Fallback to fixed positions for old exports without role column
-        const nameIdx  = colName  !== -1 ? colName  : 0;
-        const roleIdx  = colRole  !== -1 ? colRole  : -1;
-        const idsIdx   = colIds   !== -1 ? colIds   : (colRole !== -1 ? 3 : 2);
+      // Try raw staff sheet first (Google Sheet with "Video ID" + "Tên Người Làm")
+      // then fall back to StaffFilter export format
+      const imported = tryParseRawStaffSheet(buffer) ?? tryParseExportFile(buffer);
 
-        // Build role lookup: label → key (e.g. "Editor" → "EDITOR")
-        const roleLabelToKey = new Map(GROUPS.map((g) => [g.label.toLowerCase(), g.key]));
-
-        const imported: StaffMember[] = [];
-        for (let i = 1; i < raw.length; i++) {
-          const row = raw[i] as unknown[];
-          if (!row?.length) continue;
-          const name = String(row[nameIdx] ?? "").trim();
-          if (!name) continue;
-
-          // Role: from column if present, otherwise infer from name prefix
-          let role = inferRoleFromName(name);
-          if (roleIdx !== -1) {
-            const label = String(row[roleIdx] ?? "").toLowerCase().trim();
-            role = roleLabelToKey.get(label) ?? inferRoleFromName(name);
-          }
-
-          const rawIds = String(row[idsIdx] ?? "").trim();
-          const videoIds = rawIds
-            .split(/[\n\r]+/)
-            .map((s) => s.trim())
-            .filter((s) => VIDEO_ID_REGEX.test(s));
-          imported.push({ id: uuid(), name, role, videoIds });
-        }
-
-        if (imported.length === 0) {
-          setImportMsg({ ok: false, text: "Không tìm thấy dữ liệu nhân sự. Đảm bảo đây là file export từ Lọc Video ID." });
-          setTimeout(() => setImportMsg(null), 4000);
-          return;
-        }
-
-        const existingNames = new Set(staffList.map((s) => s.name));
-        const toAdd = imported.filter((s) => !existingNames.has(s.name));
-        onChange([...staffList, ...toAdd]);
-        setShowNew(false);
-        const skipped = imported.length - toAdd.length;
+      if (!imported || imported.length === 0) {
         setImportMsg({
-          ok: true,
-          text: `Đã import ${toAdd.length} nhân sự${skipped > 0 ? ` · ${skipped} trùng tên bỏ qua` : ""}.`,
+          ok: false,
+          text: "Không tìm thấy dữ liệu nhân sự. File cần có cột 'Video ID' + 'Tên Người Làm', hoặc là file export từ Lọc Video ID.",
         });
-        setTimeout(() => setImportMsg(null), 4000);
-      } catch {
-        setImportMsg({ ok: false, text: "Không đọc được file. Đảm bảo đây là file .xlsx từ Lọc Video ID." });
-        setTimeout(() => setImportMsg(null), 4000);
+        setTimeout(() => setImportMsg(null), 5000);
+        return;
       }
+
+      // Build lookup of imported staff by name
+      const importedByName = new Map(imported.map((s) => [s.name, s]));
+
+      // Override existing staff with new video IDs, keep their existing id
+      let overridden = 0;
+      const updated = staffList.map((existing) => {
+        const match = importedByName.get(existing.name);
+        if (match) {
+          overridden++;
+          importedByName.delete(existing.name); // consumed
+          return { ...existing, videoIds: match.videoIds, role: match.role };
+        }
+        return existing;
+      });
+
+      // Add remaining (new) staff
+      const newStaff = [...importedByName.values()];
+      onChange([...updated, ...newStaff]);
+      setShowNew(false);
+
+      const parts: string[] = [];
+      if (newStaff.length > 0)  parts.push(`${newStaff.length} mới`);
+      if (overridden > 0)       parts.push(`${overridden} cập nhật`);
+      setImportMsg({
+        ok: true,
+        text: `Đã import ${imported.length} nhân sự${parts.length > 0 ? ` (${parts.join(" · ")})` : ""}.`,
+      });
+      setTimeout(() => setImportMsg(null), 4000);
     };
     reader.readAsArrayBuffer(file);
   };
@@ -162,7 +220,7 @@ export default function StaffPanel({
       >
         <span className="text-lg">↑</span>
         <span className="text-sm font-medium flex-1">
-          {isDragging ? "Thả file vào đây..." : "Import từ file Lọc Video ID (.xlsx) — hoặc kéo thả vào đây"}
+          {isDragging ? "Thả file vào đây..." : "Import file nhân sự (.xlsx/.csv) — file gốc hoặc file export đều được"}
         </span>
         {importMsg && (
           <span className={`text-xs font-semibold px-2.5 py-1 rounded-full border ${
@@ -174,7 +232,7 @@ export default function StaffPanel({
           </span>
         )}
       </div>
-      <input ref={importRef} type="file" accept=".xlsx" className="hidden" onChange={handleImportFile} />
+      <input ref={importRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleImportFile} />
 
       {/* --- Inline weight editor --- */}
       <div className="card p-5 mb-6">
@@ -261,6 +319,19 @@ export default function StaffPanel({
           </div>
         )}
       </div>
+
+      {/* --- Staff list header with clear all --- */}
+      {staffList.length > 0 && (
+        <div className="flex items-center justify-between mb-3">
+          <p className="text-sm font-semibold text-ink-secondary">{staffList.length} nhân sự · {totalVideos} video IDs</p>
+          <button
+            onClick={() => { onChange([]); setShowNew(true); }}
+            className="text-xs font-medium text-red-400 hover:text-red-600 transition-colors px-2 py-1 rounded-lg hover:bg-red-50"
+          >
+            🗑 Xoá hết
+          </button>
+        </div>
+      )}
 
       {/* Staff list */}
       <div className="space-y-3 mb-3">

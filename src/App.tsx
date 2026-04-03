@@ -20,6 +20,7 @@ import StaffFilter       from "@/components/features/StaffFilter";
 import AnalyticsDashboard from "@/components/features/analytics/AnalyticsDashboard";
 import ChannelSelector   from "@/components/features/ChannelSelector";
 import SessionsPanel     from "@/components/features/SessionsPanel";
+import TourGuide, { isTourCompleted, resetTour } from "@/components/features/TourGuide";
 
 const SALARY_STEPS = [
   { n: 1, label: "Upload file" },
@@ -82,6 +83,7 @@ export default function App() {
   const [tab,          setTab]          = useState<Tab>("salary");
   const [salarySubTab, setSalarySubTab] = useState<SalarySubTab>("calc");
   const [showSaveModal, setShowSaveModal] = useState(false);
+  const [showTour,      setShowTour]      = useState(() => !isTourCompleted());
 
   // ── Channels & sessions (stored separately) ─────────────────────────────────
   const [channels, setChannels] = useState<Channel[]>(() => loadChannels());
@@ -290,14 +292,16 @@ export default function App() {
 
         <div className="flex items-center gap-3">
           {/* Channel selector */}
-          <ChannelSelector
-            channels={channels}
-            activeChannelId={state.activeChannelId}
-            onSelect={handleSelectChannel}
-            onCreate={handleCreateChannel}
-            onRename={handleRenameChannel}
-            onDelete={handleDeleteChannel}
-          />
+          <div data-tour="channel-selector">
+            <ChannelSelector
+              channels={channels}
+              activeChannelId={state.activeChannelId}
+              onSelect={handleSelectChannel}
+              onCreate={handleCreateChannel}
+              onRename={handleRenameChannel}
+              onDelete={handleDeleteChannel}
+            />
+          </div>
 
           {tab === "salary" && salarySubTab === "calc" && (
             <div className="flex items-center gap-2">
@@ -330,6 +334,7 @@ export default function App() {
         <div className="flex max-w-7xl mx-auto">
           {/* Tab: Salary */}
           <button
+            data-tour="tab-salary"
             onClick={() => setTab("salary")}
             className={`flex items-center gap-2 py-3.5 px-4 text-sm font-semibold border-b-2 transition-all mr-1 ${
               tab === "salary" ? "border-accent text-accent" : "border-transparent text-ink-tertiary hover:text-ink"
@@ -371,9 +376,19 @@ export default function App() {
             Hướng dẫn
           </a>
 
+          {/* Tour guide button */}
+          <button
+            onClick={() => { resetTour(); setShowTour(true); }}
+            className="flex items-center gap-1.5 py-3.5 px-3 text-sm font-semibold border-b-2 border-transparent text-ink-tertiary hover:text-accent transition-all"
+            title="Xem tour hướng dẫn sử dụng"
+          >
+            <span className="text-base">🎯</span>
+            Tour
+          </button>
+
           {/* Salary step indicators */}
           {tab === "salary" && salarySubTab === "calc" && (
-            <div className="flex items-center gap-1 ml-2 border-l border-border pl-4">
+            <div data-tour="step-indicators" className="flex items-center gap-1 ml-2 border-l border-border pl-4">
               {SALARY_STEPS.map((s, i) => {
                 const active = s.n === state.step;
                 const done   = s.n < state.step;
@@ -406,7 +421,7 @@ export default function App() {
       </div>
 
       {/* Content */}
-      <main className="max-w-7xl mx-auto px-6 py-10 animate-in">
+      <main data-tour="upload-zone" className="max-w-7xl mx-auto px-6 py-10 animate-in">
         {tab === "match"  && <SheetMatcher />}
         {tab === "filter" && <StaffFilter />}
 
@@ -424,6 +439,7 @@ export default function App() {
               </button>
 
               <button
+                data-tour="subtab-history"
                 onClick={() => setSalarySubTab("history")}
                 className={`flex items-center gap-2 py-2.5 px-4 text-sm font-semibold border-b-2 transition-all -mb-px ${
                   salarySubTab === "history" ? "border-accent text-accent" : "border-transparent text-ink-tertiary hover:text-ink"
@@ -538,6 +554,11 @@ export default function App() {
           onConfirm={handleSaveSession}
           onClose={() => setShowSaveModal(false)}
         />
+      )}
+
+      {/* Tour guide */}
+      {showTour && (
+        <TourGuide onClose={() => setShowTour(false)} />
       )}
     </div>
   );

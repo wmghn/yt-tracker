@@ -97,5 +97,32 @@
   from { opacity: 0; }
   to   { opacity: 1; }
 }
+@keyframes slideInRight {
+  from { transform: translateX(100%); }
+  to   { transform: translateX(0); }
+}
+@keyframes slideOutRight {
+  from { transform: translateX(0); }
+  to   { transform: translateX(100%); }
+}
 .animate-in  { animation: fadeUp 0.2s ease forwards; }
 .animate-fade { animation: fadeIn 0.15s ease forwards; }
+.animate-slide-in  { animation: slideInRight 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+.animate-slide-out { animation: slideOutRight 0.25s cubic-bezier(0.7, 0, 0.84, 0) forwards; }
+
+/* Tour guide spotlight */
+@keyframes tour-pulse {
+  0%, 100% { box-shadow: 0 0 0 4px rgba(59,130,246,0.25); }
+  50%      { box-shadow: 0 0 0 8px rgba(59,130,246,0.10); }
+}
+.tour-spotlight {
+  position: relative;
+  z-index: 55;
+  border-radius: 12px;
+  animation: tour-pulse 2s ease-in-out infinite;
+}
+@keyframes tour-tooltip-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.tour-tooltip { animation: tour-tooltip-in 0.25s cubic-bezier(0.16,1,0.3,1) forwards; }

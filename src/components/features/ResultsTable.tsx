@@ -19,7 +19,7 @@ export default function ResultsTable({ results, videos, weights, detectedOptiona
   const [expandedId,        setExpandedId]        = useState<string | null>(null);
   const [showExport,        setShowExport]         = useState(false);
   const [countFilter,       setCountFilter]        = useState<number | null>(null);
-  const [showUnassigned,    setShowUnassigned]     = useState(true);
+  const [showUnassigned,    setShowUnassigned]     = useState(false);
 
   const unassignedVideos = useMemo(() => {
     const assigned = new Set(results.flatMap((r) => r.videos.map((v) => v.youtubeId)));
