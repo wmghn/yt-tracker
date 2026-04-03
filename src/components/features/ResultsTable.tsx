@@ -8,6 +8,7 @@ import ExportModal from "./ExportModal";
 interface Props {
   results:          StaffAttribution[];
   videos:           VideoRow[];
+  shorts:           VideoRow[];
   weights:          Record<string, number>;
   detectedOptional: OptionalColumnKey[];
   onBack:           () => void;
@@ -15,11 +16,12 @@ interface Props {
   onSaveSession?:   () => void;
 }
 
-export default function ResultsTable({ results, videos, weights, detectedOptional, onBack, onNewSession, onSaveSession }: Props) {
+export default function ResultsTable({ results, videos, shorts, weights, detectedOptional, onBack, onNewSession, onSaveSession }: Props) {
   const [expandedId,        setExpandedId]        = useState<string | null>(null);
   const [showExport,        setShowExport]         = useState(false);
   const [countFilter,       setCountFilter]        = useState<number | null>(null);
   const [showUnassigned,    setShowUnassigned]     = useState(false);
+  const [showShorts,        setShowShorts]          = useState(false);
 
   const unassignedVideos = useMemo(() => {
     const assigned = new Set(results.flatMap((r) => r.videos.map((v) => v.youtubeId)));
@@ -75,6 +77,8 @@ export default function ResultsTable({ results, videos, weights, detectedOptiona
   const totalViews   = filteredResults.reduce((s, r) => s + r.totalViewsEarned, 0);
   const totalRevenue = filteredResults.reduce((s, r) => s + staffTotalRevenue(r), 0);
   const uniqueVideos = new Set(filteredResults.flatMap((r) => r.videos.map((v) => v.youtubeId))).size;
+
+  const shortsViews  = shorts.reduce((s, v) => s + v.views, 0);
 
   return (
     <div className="max-w-7xl mx-auto">
@@ -143,7 +147,7 @@ export default function ResultsTable({ results, videos, weights, detectedOptiona
             <span className="text-base">⚠</span>
             <div className="flex-1">
               <span className="font-semibold text-amber-700 text-sm">
-                {unassignedVideos.length} video chưa được gán cho nhân sự nào
+                {unassignedVideos.length} video dài chưa được gán cho nhân sự nào
               </span>
             </div>
             <span className={`text-ink-muted text-sm transition-transform duration-200 ${showUnassigned ? "rotate-180" : ""}`}>▼</span>
@@ -171,6 +175,63 @@ export default function ResultsTable({ results, videos, weights, detectedOptiona
                         >
                           {v.youtubeId}
                         </a>
+                      </td>
+                      <td className="px-4 pr-6 py-3 font-mono text-ink-secondary whitespace-nowrap">
+                        {v.views.toLocaleString("vi-VN")}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Shorts excluded */}
+      {shorts.length > 0 && (
+        <div className="card overflow-hidden mb-6">
+          <div
+            className="flex items-center gap-3 px-6 py-4 cursor-pointer hover:bg-slate-50/60 transition-colors"
+            onClick={() => setShowShorts((v) => !v)}
+          >
+            <span className="text-base">🎬</span>
+            <div className="flex-1">
+              <span className="font-semibold text-slate-600 text-sm">
+                {shorts.length} Video Shorts đã loại bỏ
+              </span>
+              <span className="text-xs text-slate-400 ml-2">
+                · {shortsViews.toLocaleString("vi-VN")} views (dưới 1 phút 30 giây)
+              </span>
+            </div>
+            <span className={`text-ink-muted text-sm transition-transform duration-200 ${showShorts ? "rotate-180" : ""}`}>▼</span>
+          </div>
+          {showShorts && (
+            <div className="border-t border-slate-100 overflow-x-auto animate-in">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-slate-50">
+                    {["Tiêu đề video", "Video ID", "Thời lượng", "Tổng views"].map((h, i, arr) => (
+                      <th key={h} className={`text-xs font-bold text-slate-500 uppercase tracking-wide px-4 py-3 text-left whitespace-nowrap ${i === 0 ? "pl-6" : ""} ${i === arr.length - 1 ? "pr-6" : ""}`}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {shorts.map((v) => (
+                    <tr key={v.youtubeId} className="hover:bg-slate-50/40 transition-colors">
+                      <td className="pl-6 pr-4 py-3 font-medium text-ink">{v.title}</td>
+                      <td className="px-4 py-3">
+                        <a
+                          href={`https://youtube.com/watch?v=${v.youtubeId}`}
+                          target="_blank" rel="noopener noreferrer"
+                          className="font-mono text-xs text-blue-500 hover:underline"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          {v.youtubeId}
+                        </a>
+                      </td>
+                      <td className="px-4 py-3 font-mono text-sm text-slate-500 whitespace-nowrap">
+                        {v.duration ? fmtDuration(v.duration) : "—"}
                       </td>
                       <td className="px-4 pr-6 py-3 font-mono text-ink-secondary whitespace-nowrap">
                         {v.views.toLocaleString("vi-VN")}

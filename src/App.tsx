@@ -264,8 +264,13 @@ export default function App() {
 
   // ── Results ───────────────────────────────────────────────────────────────────
 
+  // Separate shorts (< 90s) from long videos — shorts are excluded from attribution
+  const SHORTS_THRESHOLD = 90; // seconds
+  const longVideos  = state.videos.filter((v) => !v.duration || v.duration >= SHORTS_THRESHOLD);
+  const shortVideos = state.videos.filter((v) => v.duration !== undefined && v.duration < SHORTS_THRESHOLD);
+
   const results = state.step === 3
-    ? computeAttribution(state.videos, state.staffList, state.weights)
+    ? computeAttribution(longVideos, state.staffList, state.weights)
     : [];
 
   const totalWeight = Object.values(state.weights).reduce((s, v) => s + v, 0);
@@ -509,7 +514,8 @@ export default function App() {
                 {state.step === 3 && (
                   <ResultsTable
                     results={results}
-                    videos={state.videos}
+                    videos={longVideos}
+                    shorts={shortVideos}
                     weights={state.weights}
                     detectedOptional={state.detectedOptional}
                     onBack={() => patch({ step: 2 })}
