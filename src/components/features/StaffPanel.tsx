@@ -149,15 +149,19 @@ export default function StaffPanel({
       });
 
       const newStaff = [...importedByName.values()];
-      onChange([...updated, ...newStaff]);
+      const finalList = [...updated, ...newStaff];
+      onChange(finalList);
       setShowNew(false);
+
+      // Count unique video IDs across all staff after merge
+      const uniqueVideoIds = new Set(finalList.flatMap((s) => s.videoIds)).size;
 
       const parts: string[] = [];
       if (newStaff.length > 0)  parts.push(`${newStaff.length} mới`);
       if (overridden > 0)       parts.push(`${overridden} cập nhật`);
       setImportMsg({
         ok: true,
-        text: `Đã import ${imported.length} nhân sự${parts.length > 0 ? ` (${parts.join(" · ")})` : ""}.`,
+        text: `Đã import ${imported.length} nhân sự · ${uniqueVideoIds} video IDs${parts.length > 0 ? ` (${parts.join(" · ")})` : ""}.`,
       });
       setTimeout(() => setImportMsg(null), 4000);
     };
