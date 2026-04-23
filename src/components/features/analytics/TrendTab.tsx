@@ -1,9 +1,11 @@
 import { useState, useMemo } from "react";
 import type { StaffPeriodMetrics, StaffTrend, TrendLabel } from "@/lib/services/analytics";
+import type { MonthSession } from "@/types";
 
 interface Props {
   allMetrics: StaffPeriodMetrics[];
   trends:     StaffTrend[];
+  sessions:   MonthSession[];
 }
 
 // ── Color palette ─────────────────────────────────────────────────────────────
@@ -418,172 +420,350 @@ function CollapsibleBlock({
   );
 }
 
-// ── Freshness breakdown (new vs legacy content) ──────────────────────────────
-// Shows where each staff member's views / watch time come from, grouped by the
-// month the video was published in. Answers: "Are today's views from freshly
-// published videos or the long tail of older content?"
-const FRESHNESS_PALETTE = [
-  "#10b981", "#3b82f6", "#6366f1", "#8b5cf6",
+// ── Freshness breakdown (fresh vs legacy content within one session) ─────────
+// For a SELECTED SESSION (reporting month), splits each staff's views/watchtime
+// in that session by the publish month of each video. A video published in the
+// same month as the session = "MỚI" (fresh content made for that report). Any
+// earlier publish month = "CŨ" (legacy long-tail). This answers: "In this
+// session's total, how much comes from newly published videos vs the back
+// catalog?"
+function formatYYYYMMLabel(p: string): string {
+  const [y, m] = p.split("-");
+  if (!y || !m) return p;
+  return `Tháng ${parseInt(m)}/${y}`;
+}
+
+const LEGACY_PALETTE = [
+  "#3b82f6", "#6366f1", "#8b5cf6", "#a855f7",
   "#ec4899", "#f59e0b", "#06b6d4", "#14b8a6",
-  "#a855f7", "#f43f5e", "#84cc16", "#6b7280",
+  "#f43f5e", "#84cc16", "#eab308", "#64748b",
 ];
+const FRESH_COLOR   = "#10b981";   // green — videos published in the report month
+const FUTURE_COLOR  = "#f97316";   // orange — videos published AFTER the report month (data anomaly)
+const UNKNOWN_COLOR = "#9ca3af";   // gray — no publish date
 
-function FreshnessBreakdown({
-  allMetrics, periods, periodLabelMap,
-}: {
-  allMetrics:     StaffPeriodMetrics[];
-  periods:        string[];                 // ascending (oldest → newest)
-  periodLabelMap: Map<string, string>;
-}) {
-  const [mode, setMode] = useState<"views" | "watchTime">("views");
+type BucketCategory = "fresh" | "legacy" | "future" | "unknown";
 
-  const getValue = (m: StaffPeriodMetrics) =>
-    mode === "views" ? m.weightedViews : m.totalWatchTime;
-  const fmt = mode === "views" ? fmtViews : fmtWatchTime;
+interface StaffFreshness {
+  staffName:     string;
+  role:          string;
+  totalViews:    number;
+  totalWatch:    number;
+  freshViews:    number;
+  freshWatch:    number;
+  legacyViews:   number;
+  legacyWatch:   number;
+  // Per-month breakdown: pubMonth -> { views, watch, videoCount, category }
+  byMonth: Map<string, {
+    views:      number;
+    watch:      number;
+    videoCount: number;
+    category:   BucketCategory;
+  }>;
+}
 
-  // Newest → oldest for stacking & legend order
-  const newestFirst = useMemo(() => [...periods].reverse(), [periods]);
+function computeSessionFreshness(
+  session:      MonthSession,
+  reportMonth:  string,
+): StaffFreshness[] {
+  const videoIndex = new Map(session.videos.map(v => [v.youtubeId, v]));
 
-  const periodColors = useMemo(() => {
-    const map = new Map<string, string>();
-    newestFirst.forEach((p, i) => map.set(p, FRESHNESS_PALETTE[i % FRESHNESS_PALETTE.length]));
-    return map;
-  }, [newestFirst]);
-
-  const latestPeriod = periods[periods.length - 1] ?? "";
-
-  const rows = useMemo(() => {
-    const byStaff = new Map<string, StaffPeriodMetrics[]>();
-    for (const m of allMetrics) {
-      const key = `${m.staffName}::${m.role}`;
-      if (!byStaff.has(key)) byStaff.set(key, []);
-      byStaff.get(key)!.push(m);
+  // Per-video role member counts (for weighted attribution, matching
+  // computeSingleSessionMetrics in analytics.ts).
+  const roleMembers = new Map<string, Record<string, number>>();
+  for (const staff of session.staffList) {
+    for (const vid of staff.videoIds) {
+      if (!videoIndex.has(vid)) continue;
+      const counts = roleMembers.get(vid) ?? {};
+      counts[staff.role] = (counts[staff.role] ?? 0) + 1;
+      roleMembers.set(vid, counts);
     }
-    return [...byStaff.entries()]
-      .map(([key, metrics]) => {
-        const total = metrics.reduce((s, m) => s + getValue(m), 0);
-        const latest = metrics.find(m => m.period === latestPeriod);
-        const latestVal = latest ? getValue(latest) : 0;
-        return { key, metrics, total, latestVal };
-      })
-      .filter(r => r.total > 0)
-      .sort((a, b) => b.total - a.total);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [allMetrics, mode, latestPeriod]);
+  }
 
-  if (rows.length === 0 || periods.length === 0) {
+  const categorize = (pub?: string): BucketCategory => {
+    if (!pub) return "unknown";
+    if (pub === reportMonth) return "fresh";
+    if (pub < reportMonth)   return "legacy";
+    return "future";
+  };
+
+  const out: StaffFreshness[] = [];
+
+  for (const staff of session.staffList) {
+    const weight = (session.weights[staff.role] ?? 0) / 100;
+    const byMonth = new Map<string, { views: number; watch: number; videoCount: number; category: BucketCategory }>();
+    let totalViews = 0, totalWatch = 0;
+    let freshViews = 0, freshWatch = 0;
+    let legacyViews = 0, legacyWatch = 0;
+
+    for (const vid of staff.videoIds) {
+      const v = videoIndex.get(vid);
+      if (!v) continue;
+
+      const members  = roleMembers.get(vid)?.[staff.role] ?? 1;
+      const views    = Math.round(v.views * weight / members);
+      // Match existing "tổng" semantics for watch time (raw sum, no weighting)
+      const watch    = v.watchTime ?? 0;
+      const pubMonth = v.publishedMonth ?? "unknown";
+      const category = categorize(v.publishedMonth);
+
+      const entry = byMonth.get(pubMonth) ?? { views: 0, watch: 0, videoCount: 0, category };
+      entry.views      += views;
+      entry.watch      += watch;
+      entry.videoCount += 1;
+      byMonth.set(pubMonth, entry);
+
+      totalViews += views;
+      totalWatch += watch;
+      if (category === "fresh") {
+        freshViews += views;
+        freshWatch += watch;
+      } else if (category === "legacy") {
+        legacyViews += views;
+        legacyWatch += watch;
+      }
+    }
+
+    if (totalViews > 0 || totalWatch > 0) {
+      out.push({
+        staffName:  staff.name,
+        role:       staff.role,
+        totalViews, totalWatch,
+        freshViews, freshWatch,
+        legacyViews, legacyWatch,
+        byMonth,
+      });
+    }
+  }
+
+  return out;
+}
+
+function FreshnessBreakdown({ sessions }: { sessions: MonthSession[] }) {
+  const [mode, setMode] = useState<"views" | "watchTime">("views");
+  const [selectedId, setSelectedId] = useState<string>("");
+
+  // Sessions are passed newest-first; default to the most recent
+  const session = useMemo(() => {
+    if (sessions.length === 0) return undefined;
+    return sessions.find(s => s.id === selectedId) ?? sessions[0];
+  }, [sessions, selectedId]);
+
+  const reportMonth = session?.period ?? "";
+
+  const staffAggs = useMemo(
+    () => (session ? computeSessionFreshness(session, reportMonth) : []),
+    [session, reportMonth],
+  );
+
+  // Assign colors to each publish-month that appears, with fresh month = green
+  // and legacy months gradient from newest to oldest. Future/unknown get
+  // dedicated colors.
+  const monthColors = useMemo(() => {
+    const allMonths = new Set<string>();
+    for (const a of staffAggs) for (const m of a.byMonth.keys()) allMonths.add(m);
+
+    const legacy = [...allMonths]
+      .filter(m => m !== reportMonth && m !== "unknown" && m <= reportMonth)
+      .sort()
+      .reverse();  // newest legacy first
+
+    const map = new Map<string, string>();
+    map.set(reportMonth, FRESH_COLOR);
+    map.set("unknown",   UNKNOWN_COLOR);
+    legacy.forEach((m, i) => map.set(m, LEGACY_PALETTE[i % LEGACY_PALETTE.length]));
+
+    // Future months (shouldn't normally happen but guard)
+    for (const m of allMonths) {
+      if (!map.has(m)) map.set(m, FUTURE_COLOR);
+    }
+    return map;
+  }, [staffAggs, reportMonth]);
+
+  // Deduplicated list of all pub months that appeared in this session, ordered
+  // for the legend: fresh first, then legacy newest→oldest, then future, then unknown
+  const legendMonths = useMemo(() => {
+    const set = new Set<string>();
+    for (const a of staffAggs) for (const m of a.byMonth.keys()) set.add(m);
+    const all = [...set];
+    const fresh   = all.filter(m => m === reportMonth);
+    const legacy  = all.filter(m => m !== reportMonth && m !== "unknown" && m <= reportMonth).sort().reverse();
+    const future  = all.filter(m => m !== "unknown" && m > reportMonth).sort().reverse();
+    const unknown = all.filter(m => m === "unknown");
+    return [...fresh, ...legacy, ...future, ...unknown];
+  }, [staffAggs, reportMonth]);
+
+  const getTotal   = (a: StaffFreshness) => mode === "views" ? a.totalViews  : a.totalWatch;
+  const getFresh   = (a: StaffFreshness) => mode === "views" ? a.freshViews  : a.freshWatch;
+  const getMonthV  = (e: { views: number; watch: number }) => mode === "views" ? e.views : e.watch;
+  const fmt        = mode === "views" ? fmtViews : fmtWatchTime;
+  const unit       = mode === "views" ? "views" : "giờ xem";
+
+  const sortedStaff = useMemo(
+    () => [...staffAggs].sort((a, b) => getTotal(b) - getTotal(a)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [staffAggs, mode],
+  );
+
+  if (sessions.length === 0) {
     return (
       <p className="text-sm text-ink-muted py-6 text-center bg-surface-2 rounded-xl">
-        Không có dữ liệu để hiển thị.
+        Chưa có session nào để phân tích.
       </p>
     );
   }
+  if (!session) return null;
+
+  const monthLabel = (m: string) => m === "unknown" ? "Không rõ ngày đăng" : formatYYYYMMLabel(m);
 
   return (
     <div className="space-y-4">
-      {/* Mode toggle */}
-      <div className="flex items-center gap-2 flex-wrap">
-        <span className="text-xs text-ink-muted mr-1">Chỉ số:</span>
-        {(["views", "watchTime"] as const).map(m => (
-          <button
-            key={m}
-            onClick={() => setMode(m)}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
-              mode === m
-                ? "bg-accent text-white border-accent shadow-sm"
-                : "bg-surface-2 text-ink-muted border-border hover:text-ink"
-            }`}
+      {/* Session selector + mode toggle */}
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-ink-muted">Session:</span>
+          <select
+            value={session.id}
+            onChange={e => setSelectedId(e.target.value)}
+            className="input input-sm text-sm pr-8 min-w-[180px]"
           >
-            {m === "views" ? "Views" : "Giờ xem"}
-          </button>
-        ))}
+            {sessions.map((s, i) => (
+              <option key={s.id} value={s.id}>
+                {s.name}{i === 0 ? " (gần nhất)" : ""}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-ink-muted">Chỉ số:</span>
+          {(["views", "watchTime"] as const).map(m => (
+            <button
+              key={m}
+              onClick={() => setMode(m)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
+                mode === m
+                  ? "bg-accent text-white border-accent shadow-sm"
+                  : "bg-surface-2 text-ink-muted border-border hover:text-ink"
+              }`}
+            >
+              {m === "views" ? "Views" : "Giờ xem"}
+            </button>
+          ))}
+        </div>
       </div>
 
       <p className="text-xs text-ink-muted">
-        Mỗi thanh hiển thị tỷ lệ {mode === "views" ? "views" : "giờ xem"} của nhân sự phân bổ
-        theo <span className="font-semibold">tháng xuất bản video</span>. Màu xanh lá là tháng mới
-        nhất — giúp xác định {mode === "views" ? "views" : "giờ xem"} đến từ video mới làm hay video cũ.
+        Session <span className="font-semibold text-ink">{session.name}</span> = {unit} phát sinh trong tháng báo cáo{" "}
+        <span className="font-semibold text-ink">{formatYYYYMMLabel(reportMonth)}</span>. Mỗi thanh dưới hiển thị
+        nguồn gốc của {unit} đó theo <span className="font-semibold">tháng xuất bản</span> của video:
+        <span className="text-emerald-600 font-semibold"> xanh lá = video đăng cùng tháng (MỚI)</span>,
+        các màu khác = <span className="font-semibold">video cũ</span> tiếp tục ra view / giờ xem.
       </p>
 
-      {/* Period color legend */}
-      <div className="flex flex-wrap gap-x-3 gap-y-1.5 text-xs bg-surface-2 rounded-lg p-2.5 border border-border">
-        {newestFirst.map((p, idx) => (
-          <div key={p} className="flex items-center gap-1.5">
-            <span className="w-3 h-3 rounded-sm inline-block" style={{ backgroundColor: periodColors.get(p) }} />
-            <span className="text-ink font-medium">{periodLabelMap.get(p) ?? p}</span>
-            {idx === 0 && (
-              <span className="text-emerald-600 font-bold text-[10px] uppercase tracking-wide">Mới nhất</span>
-            )}
-          </div>
-        ))}
-      </div>
-
-      {/* Staff bars */}
-      <div className="space-y-3">
-        {rows.map(({ key, metrics, total, latestVal }) => {
-          const [staffName, role] = key.split("::");
-          const sorted = [...metrics].sort((a, b) => b.period.localeCompare(a.period)); // newest first
-          const latestPct = total > 0 ? (latestVal / total) * 100 : 0;
-          const oldPct    = 100 - latestPct;
-
-          return (
-            <div key={key} className="card p-3 border border-border">
-              <div className="flex justify-between items-start mb-2 gap-3">
-                <div className="flex-1 min-w-0">
-                  <p className="font-semibold text-ink text-sm truncate">{staffName}</p>
-                  <p className="text-xs text-ink-muted">{role}</p>
-                </div>
-                <div className="text-right flex-shrink-0">
-                  <p className="text-sm font-bold text-ink">
-                    {fmt(total)} <span className="text-[10px] font-normal text-ink-muted">tổng</span>
-                  </p>
-                  <p className="text-[11px] mt-0.5">
-                    <span className="text-emerald-600 font-bold">{latestPct.toFixed(0)}%</span>
-                    <span className="text-ink-muted"> mới · </span>
-                    <span className="text-slate-500 font-semibold">{oldPct.toFixed(0)}%</span>
-                    <span className="text-ink-muted"> cũ</span>
-                  </p>
-                </div>
-              </div>
-
-              {/* Stacked horizontal bar */}
-              <div className="flex h-6 rounded-lg overflow-hidden bg-surface-2 mb-2 border border-border">
-                {sorted.map(m => {
-                  const val = getValue(m);
-                  const pct = total > 0 ? (val / total) * 100 : 0;
-                  if (pct < 0.2) return null;
-                  return (
-                    <div
-                      key={m.period}
-                      style={{ width: `${pct}%`, backgroundColor: periodColors.get(m.period) }}
-                      className="flex items-center justify-center text-[10px] font-bold text-white overflow-hidden"
-                      title={`${periodLabelMap.get(m.period) ?? m.period}: ${fmt(val)} (${pct.toFixed(1)}%) · ${m.videoCount} video`}
-                    >
-                      {pct >= 10 && `${pct.toFixed(0)}%`}
-                    </div>
-                  );
-                })}
-              </div>
-
-              {/* Monthly breakdown grid */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-x-3 gap-y-1 text-xs">
-                {sorted.map(m => {
-                  const val = getValue(m);
-                  const pct = total > 0 ? (val / total) * 100 : 0;
-                  return (
-                    <div key={m.period} className="flex items-center gap-1.5 min-w-0">
-                      <span className="w-2.5 h-2.5 rounded-sm flex-shrink-0" style={{ backgroundColor: periodColors.get(m.period) }} />
-                      <span className="text-ink-muted truncate">{periodLabelMap.get(m.period) ?? m.period}:</span>
-                      <span className="text-ink font-semibold whitespace-nowrap">{fmt(val)}</span>
-                      <span className="text-ink-muted whitespace-nowrap">({pct.toFixed(0)}%) · {m.videoCount}v</span>
-                    </div>
-                  );
-                })}
-              </div>
+      {/* Color legend */}
+      {legendMonths.length > 0 && (
+        <div className="flex flex-wrap gap-x-3 gap-y-1.5 text-xs bg-surface-2 rounded-lg p-2.5 border border-border">
+          {legendMonths.map(m => (
+            <div key={m} className="flex items-center gap-1.5">
+              <span className="w-3 h-3 rounded-sm inline-block" style={{ backgroundColor: monthColors.get(m) }} />
+              <span className="text-ink font-medium">{monthLabel(m)}</span>
+              {m === reportMonth && (
+                <span className="text-emerald-600 font-bold text-[10px] uppercase tracking-wide">Mới</span>
+              )}
+              {m !== "unknown" && m > reportMonth && (
+                <span className="text-orange-600 font-bold text-[10px] uppercase tracking-wide">Tháng sau (?)</span>
+              )}
             </div>
-          );
-        })}
-      </div>
+          ))}
+        </div>
+      )}
+
+      {sortedStaff.length === 0 ? (
+        <p className="text-sm text-ink-muted py-6 text-center bg-surface-2 rounded-xl">
+          Session này không có {unit} nào được gán cho nhân sự.
+        </p>
+      ) : (
+        <div className="space-y-3">
+          {sortedStaff.map(a => {
+            const total     = getTotal(a);
+            const freshVal  = getFresh(a);
+            const freshPct  = total > 0 ? (freshVal / total) * 100 : 0;
+            const legacyPct = 100 - freshPct;
+
+            // Order segments in the stacked bar: fresh first, then legacy newest→oldest, then future, then unknown
+            const sortedMonths = [...a.byMonth.entries()].sort(([ma], [mb]) => {
+              if (ma === reportMonth) return -1;
+              if (mb === reportMonth) return 1;
+              if (ma === "unknown")   return 1;
+              if (mb === "unknown")   return -1;
+              // Future → after fresh but before legacy
+              const aIsFuture = ma > reportMonth;
+              const bIsFuture = mb > reportMonth;
+              if (aIsFuture && !bIsFuture) return -1;
+              if (!aIsFuture && bIsFuture) return 1;
+              return mb.localeCompare(ma);   // newest first among same kind
+            });
+
+            return (
+              <div key={`${a.staffName}::${a.role}`} className="card p-3 border border-border">
+                <div className="flex justify-between items-start mb-2 gap-3">
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold text-ink text-sm truncate">{a.staffName}</p>
+                    <p className="text-xs text-ink-muted">{a.role}</p>
+                  </div>
+                  <div className="text-right flex-shrink-0">
+                    <p className="text-sm font-bold text-ink">
+                      {fmt(total)} <span className="text-[10px] font-normal text-ink-muted">tổng</span>
+                    </p>
+                    <p className="text-[11px] mt-0.5">
+                      <span className="text-emerald-600 font-bold">{freshPct.toFixed(0)}%</span>
+                      <span className="text-ink-muted"> mới · </span>
+                      <span className="text-slate-500 font-semibold">{legacyPct.toFixed(0)}%</span>
+                      <span className="text-ink-muted"> cũ</span>
+                    </p>
+                  </div>
+                </div>
+
+                {/* Stacked horizontal bar */}
+                <div className="flex h-6 rounded-lg overflow-hidden bg-surface-2 mb-2 border border-border">
+                  {sortedMonths.map(([month, entry]) => {
+                    const val = getMonthV(entry);
+                    const pct = total > 0 ? (val / total) * 100 : 0;
+                    if (pct < 0.2) return null;
+                    return (
+                      <div
+                        key={month}
+                        style={{ width: `${pct}%`, backgroundColor: monthColors.get(month) }}
+                        className="flex items-center justify-center text-[10px] font-bold text-white overflow-hidden"
+                        title={`${monthLabel(month)}: ${fmt(val)} (${pct.toFixed(1)}%) · ${entry.videoCount} video`}
+                      >
+                        {pct >= 10 && `${pct.toFixed(0)}%`}
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Monthly breakdown grid */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-x-3 gap-y-1 text-xs">
+                  {sortedMonths.map(([month, entry]) => {
+                    const val = getMonthV(entry);
+                    const pct = total > 0 ? (val / total) * 100 : 0;
+                    return (
+                      <div key={month} className="flex items-center gap-1.5 min-w-0">
+                        <span className="w-2.5 h-2.5 rounded-sm flex-shrink-0" style={{ backgroundColor: monthColors.get(month) }} />
+                        <span className="text-ink-muted truncate">{monthLabel(month)}:</span>
+                        <span className="text-ink font-semibold whitespace-nowrap">{fmt(val)}</span>
+                        <span className="text-ink-muted whitespace-nowrap">({pct.toFixed(0)}%) · {entry.videoCount}v</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
@@ -727,7 +907,7 @@ function TrendCards({
 }
 
 // ── Main ──────────────────────────────────────────────────────────────────────
-export default function TrendTab({ allMetrics, trends }: Props) {
+export default function TrendTab({ allMetrics, trends, sessions }: Props) {
   const [hiddenKeys, setHiddenKeys] = useState<Set<string>>(new Set());
 
   // Periods oldest → newest (sortKeys "000000"… are already alphabetically ordered)
@@ -895,13 +1075,9 @@ export default function TrendTab({ allMetrics, trends }: Props) {
         </CollapsibleBlock>
       )}
 
-      {/* Freshness — video mới vs cũ */}
+      {/* Freshness — video mới vs cũ (per-session) */}
       <CollapsibleBlock title="Phân bổ theo tháng xuất bản — Video mới vs cũ">
-        <FreshnessBreakdown
-          allMetrics={allMetrics}
-          periods={periods}
-          periodLabelMap={periodLabelMap}
-        />
+        <FreshnessBreakdown sessions={sessions} />
       </CollapsibleBlock>
 
       {/* Pie charts section */}

@@ -10,7 +10,7 @@ import {
   migrateFromOldState,
 } from "@/lib/storage/session-storage";
 import { computeAttribution } from "@/lib/services/attribution";
-import { derivePeriod, periodLabel, parsePeriodFromName } from "@/lib/services/analytics";
+import { periodLabel } from "@/lib/services/analytics";
 
 import UploadZone        from "@/components/features/UploadZone";
 import StaffPanel        from "@/components/features/StaffPanel";
@@ -38,35 +38,44 @@ const DEFAULT_WEIGHTS: Record<string, number> = Object.fromEntries(
 // ── Save-session modal ────────────────────────────────────────────────────────
 
 function SaveSessionModal({
-  defaultName,
+  defaultPeriod,
   onConfirm,
   onClose,
 }: {
-  defaultName: string;
-  onConfirm: (name: string) => void;
+  defaultPeriod: string;                       // YYYY-MM
+  onConfirm: (period: string) => void;
   onClose: () => void;
 }) {
-  const [name, setName] = useState(defaultName);
+  const [period, setPeriod] = useState(defaultPeriod);
+  const valid = /^\d{4}-\d{2}$/.test(period);
   return (
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={onClose}>
       <div className="bg-surface-1 rounded-2xl shadow-xl w-full max-w-sm p-6" onClick={e => e.stopPropagation()}>
         <h2 className="text-lg font-bold text-ink mb-1">Lưu tháng này</h2>
         <p className="text-sm text-ink-muted mb-4">
-          Đặt tên cho dữ liệu tháng này để dễ nhận biết sau.
+          Chọn tháng báo cáo cho dữ liệu đang xem.
         </p>
+        <label className="block text-xs font-semibold text-ink-muted uppercase tracking-wide mb-1.5">
+          Tháng báo cáo
+        </label>
         <input
           autoFocus
-          value={name}
-          onChange={e => setName(e.target.value)}
-          onKeyDown={e => e.key === "Enter" && name.trim() && onConfirm(name.trim())}
-          placeholder="Tên tháng..."
-          className="input w-full mb-4"
+          type="month"
+          value={period}
+          onChange={e => setPeriod(e.target.value)}
+          onKeyDown={e => e.key === "Enter" && valid && onConfirm(period)}
+          className="input w-full mb-3"
         />
+        {valid && (
+          <p className="text-xs text-ink-muted mb-4">
+            Tên hiển thị: <span className="font-semibold text-ink">{periodLabel(period)}</span>
+          </p>
+        )}
         <div className="flex gap-2 justify-end">
           <button onClick={onClose} className="btn-ghost">Hủy</button>
           <button
-            onClick={() => name.trim() && onConfirm(name.trim())}
-            disabled={!name.trim()}
+            onClick={() => valid && onConfirm(period)}
+            disabled={!valid}
             className="btn-primary disabled:opacity-40"
           >
             Lưu
@@ -184,19 +193,17 @@ export default function App() {
     [sessions, state.activeChannelId],
   );
 
-  const handleSaveSession = (name: string) => {
+  const handleSaveSession = (period: string) => {
     if (!state.activeChannelId) return;
-    // Parse period from session name first; fall back to derivePeriod; fall back to current month
-    const now = new Date();
-    const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-    const period = parsePeriodFromName(name) || derivePeriod(state.videos) || currentMonth;
+    // period is YYYY-MM from the month picker. Name always matches periodLabel(period)
+    // so history and analytics use a single canonical format.
     const label  = periodLabel(period);
     // displayOrder = max existing + 1 so new sessions appear newest (rightmost on chart)
     const maxOrder = channelSessions.reduce((m, s) => Math.max(m, s.displayOrder ?? s.savedAt), 0);
     const newSession: MonthSession = {
       id:               crypto.randomUUID(),
       channelId:        state.activeChannelId,
-      name,
+      name:             label,
       period,
       label,
       videos:           state.videos,
@@ -220,8 +227,9 @@ export default function App() {
     setSessions(prev => reorderSessions(prev, state.activeChannelId!, orderedIds));
   };
 
-  const handleRenameSession = (id: string, name: string) => {
-    setSessions(prev => prev.map(s => s.id === id ? { ...s, name } : s));
+  const handleRenameSession = (id: string, period: string) => {
+    const label = periodLabel(period);
+    setSessions(prev => prev.map(s => s.id === id ? { ...s, period, label, name: label } : s));
   };
 
   const handleLoadSession = (session: MonthSession) => {
@@ -277,10 +285,13 @@ export default function App() {
 
   // ── Default save-session name ─────────────────────────────────────────────────
 
-  const defaultSaveName = useMemo(() => {
-    const p = derivePeriod(state.videos);
-    return periodLabel(p);
-  }, [state.videos]);
+  // Default to the CURRENT month (live, not derived from video data). Recomputed
+  // each time the save modal opens so a session opened across midnight still
+  // reflects today's date.
+  const defaultSavePeriod = useMemo(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  }, [showSaveModal]);
 
   return (
     <div className="min-h-screen bg-surface">
@@ -558,7 +569,7 @@ export default function App() {
       {/* Save session modal */}
       {showSaveModal && (
         <SaveSessionModal
-          defaultName={defaultSaveName}
+          defaultPeriod={defaultSavePeriod}
           onConfirm={handleSaveSession}
           onClose={() => setShowSaveModal(false)}
         />

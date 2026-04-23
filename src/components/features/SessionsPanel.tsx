@@ -1,21 +1,19 @@
 import { useState } from "react";
 import type { MonthSession, Channel } from "@/types";
-import { parsePeriodFromName } from "@/lib/services/analytics";
 
 interface Props {
   channel:          Channel;
   sessions:         MonthSession[];       // sorted ascending (oldest first) by displayOrder
   onLoad:           (session: MonthSession) => void;
-  onRename:         (id: string, name: string) => void;
+  onRename:         (id: string, period: string) => void;
   onDelete:         (id: string) => void;
   onReorder:        (orderedIds: string[]) => void;
   onStartNewUpload: () => void;
 }
 
-/** Parse month/year from session name for badge display. Falls back to session.period. */
+/** Derive month/year badge from session.period (authoritative YYYY-MM). */
 function parseBadge(s: MonthSession): { month: string; year: string } {
-  const src  = parsePeriodFromName(s.name) || s.period || "";
-  const [yr, mo] = src.split("-");
+  const [yr, mo] = (s.period || "").split("-");
   const month = mo ? `T${parseInt(mo)}` : "—";
   const year  = yr ? yr.slice(2) : "";
   return { month, year };
@@ -24,15 +22,14 @@ function parseBadge(s: MonthSession): { month: string; year: string } {
 export default function SessionsPanel({
   channel, sessions, onLoad, onRename, onDelete, onReorder, onStartNewUpload,
 }: Props) {
-  const [editingId,  setEditingId]  = useState<string | null>(null);
-  const [editName,   setEditName]   = useState("");
+  const [editingId,    setEditingId]    = useState<string | null>(null);
+  const [editPeriod,   setEditPeriod]   = useState("");
 
   // Display newest → oldest (reverse of chart order)
   const displayed = [...sessions].reverse();
 
   const handleRename = (id: string) => {
-    const name = editName.trim();
-    if (name) onRename(id, name);
+    if (/^\d{4}-\d{2}$/.test(editPeriod)) onRename(id, editPeriod);
     setEditingId(null);
   };
 
@@ -136,8 +133,9 @@ export default function SessionsPanel({
                     <div className="flex gap-1.5 items-center">
                       <input
                         autoFocus
-                        value={editName}
-                        onChange={e => setEditName(e.target.value)}
+                        type="month"
+                        value={editPeriod}
+                        onChange={e => setEditPeriod(e.target.value)}
                         onKeyDown={e => {
                           if (e.key === "Enter") handleRename(s.id);
                           if (e.key === "Escape") setEditingId(null);
@@ -170,9 +168,9 @@ export default function SessionsPanel({
                   </button>
                   {editingId !== s.id && (
                     <button
-                      onClick={() => { setEditingId(s.id); setEditName(s.name); }}
+                      onClick={() => { setEditingId(s.id); setEditPeriod(s.period || ""); }}
                       className="btn-ghost btn-sm p-1.5 text-ink-muted hover:text-ink"
-                      title="Đổi tên"
+                      title="Đổi tháng"
                     >
                       <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor">
                         <path d="M11.013 1.427a1.75 1.75 0 0 1 2.474 0l1.086 1.086a1.75 1.75 0 0 1 0 2.474l-8.61 8.61c-.21.21-.47.364-.756.445l-3.251.93a.75.75 0 0 1-.927-.928l.929-3.25c.081-.286.235-.547.445-.758l8.61-8.61zm1.414 1.06a.25.25 0 0 0-.354 0L10.811 3.75l1.439 1.44 1.263-1.263a.25.25 0 0 0 0-.354l-1.086-1.086z"/>

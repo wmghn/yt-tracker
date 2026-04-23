@@ -227,7 +227,7 @@ export default function AnalyticsDashboard({ sessions }: Props) {
       {subTab === "ranking"  && (
         <RankingTab allMetrics={singleMetrics} filteredVideos={singleVideos} staffList={singleStaff} />
       )}
-      {subTab === "trend"    && <TrendTab allMetrics={allMetrics} trends={allTrends} />}
+      {subTab === "trend"    && <TrendTab allMetrics={allMetrics} trends={allTrends} sessions={sessions} />}
     </div>
   );
 }
