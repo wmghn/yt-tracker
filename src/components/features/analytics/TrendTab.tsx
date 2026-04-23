@@ -418,30 +418,310 @@ function CollapsibleBlock({
   );
 }
 
-// ── Trend summary cards ────────────────────────────────────────────────────────
-function TrendCards({ trends }: { trends: StaffTrend[] }) {
+// ── Freshness breakdown (new vs legacy content) ──────────────────────────────
+// Shows where each staff member's views / watch time come from, grouped by the
+// month the video was published in. Answers: "Are today's views from freshly
+// published videos or the long tail of older content?"
+const FRESHNESS_PALETTE = [
+  "#10b981", "#3b82f6", "#6366f1", "#8b5cf6",
+  "#ec4899", "#f59e0b", "#06b6d4", "#14b8a6",
+  "#a855f7", "#f43f5e", "#84cc16", "#6b7280",
+];
+
+function FreshnessBreakdown({
+  allMetrics, periods, periodLabelMap,
+}: {
+  allMetrics:     StaffPeriodMetrics[];
+  periods:        string[];                 // ascending (oldest → newest)
+  periodLabelMap: Map<string, string>;
+}) {
+  const [mode, setMode] = useState<"views" | "watchTime">("views");
+
+  const getValue = (m: StaffPeriodMetrics) =>
+    mode === "views" ? m.weightedViews : m.totalWatchTime;
+  const fmt = mode === "views" ? fmtViews : fmtWatchTime;
+
+  // Newest → oldest for stacking & legend order
+  const newestFirst = useMemo(() => [...periods].reverse(), [periods]);
+
+  const periodColors = useMemo(() => {
+    const map = new Map<string, string>();
+    newestFirst.forEach((p, i) => map.set(p, FRESHNESS_PALETTE[i % FRESHNESS_PALETTE.length]));
+    return map;
+  }, [newestFirst]);
+
+  const latestPeriod = periods[periods.length - 1] ?? "";
+
+  const rows = useMemo(() => {
+    const byStaff = new Map<string, StaffPeriodMetrics[]>();
+    for (const m of allMetrics) {
+      const key = `${m.staffName}::${m.role}`;
+      if (!byStaff.has(key)) byStaff.set(key, []);
+      byStaff.get(key)!.push(m);
+    }
+    return [...byStaff.entries()]
+      .map(([key, metrics]) => {
+        const total = metrics.reduce((s, m) => s + getValue(m), 0);
+        const latest = metrics.find(m => m.period === latestPeriod);
+        const latestVal = latest ? getValue(latest) : 0;
+        return { key, metrics, total, latestVal };
+      })
+      .filter(r => r.total > 0)
+      .sort((a, b) => b.total - a.total);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [allMetrics, mode, latestPeriod]);
+
+  if (rows.length === 0 || periods.length === 0) {
+    return (
+      <p className="text-sm text-ink-muted py-6 text-center bg-surface-2 rounded-xl">
+        Không có dữ liệu để hiển thị.
+      </p>
+    );
+  }
+
   return (
-    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-      {trends.map(t => {
-        const cfg = TREND_CONFIG[t.label];
-        const latestViews = t.periods[t.periods.length - 1]?.weightedViews ?? 0;
-        return (
-          <div key={`${t.staffName}::${t.role}`} className="card p-4 flex items-center gap-4">
-            <div className="flex-1 min-w-0">
-              <p className="font-bold text-ink text-sm truncate">{t.staffName}</p>
-              <p className="text-xs text-ink-muted">{t.role} · {t.periods.length} tháng</p>
-            </div>
-            <div className="text-right">
-              <span className={`text-xs font-bold px-2.5 py-1 rounded-full border ${cfg.badge}`}>
-                {cfg.icon} {cfg.label}
-              </span>
-              <p className="text-xs text-ink-muted mt-1">
-                {fmtViews(latestViews)} views tháng gần nhất
-              </p>
-            </div>
+    <div className="space-y-4">
+      {/* Mode toggle */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <span className="text-xs text-ink-muted mr-1">Chỉ số:</span>
+        {(["views", "watchTime"] as const).map(m => (
+          <button
+            key={m}
+            onClick={() => setMode(m)}
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
+              mode === m
+                ? "bg-accent text-white border-accent shadow-sm"
+                : "bg-surface-2 text-ink-muted border-border hover:text-ink"
+            }`}
+          >
+            {m === "views" ? "Views" : "Giờ xem"}
+          </button>
+        ))}
+      </div>
+
+      <p className="text-xs text-ink-muted">
+        Mỗi thanh hiển thị tỷ lệ {mode === "views" ? "views" : "giờ xem"} của nhân sự phân bổ
+        theo <span className="font-semibold">tháng xuất bản video</span>. Màu xanh lá là tháng mới
+        nhất — giúp xác định {mode === "views" ? "views" : "giờ xem"} đến từ video mới làm hay video cũ.
+      </p>
+
+      {/* Period color legend */}
+      <div className="flex flex-wrap gap-x-3 gap-y-1.5 text-xs bg-surface-2 rounded-lg p-2.5 border border-border">
+        {newestFirst.map((p, idx) => (
+          <div key={p} className="flex items-center gap-1.5">
+            <span className="w-3 h-3 rounded-sm inline-block" style={{ backgroundColor: periodColors.get(p) }} />
+            <span className="text-ink font-medium">{periodLabelMap.get(p) ?? p}</span>
+            {idx === 0 && (
+              <span className="text-emerald-600 font-bold text-[10px] uppercase tracking-wide">Mới nhất</span>
+            )}
           </div>
-        );
-      })}
+        ))}
+      </div>
+
+      {/* Staff bars */}
+      <div className="space-y-3">
+        {rows.map(({ key, metrics, total, latestVal }) => {
+          const [staffName, role] = key.split("::");
+          const sorted = [...metrics].sort((a, b) => b.period.localeCompare(a.period)); // newest first
+          const latestPct = total > 0 ? (latestVal / total) * 100 : 0;
+          const oldPct    = 100 - latestPct;
+
+          return (
+            <div key={key} className="card p-3 border border-border">
+              <div className="flex justify-between items-start mb-2 gap-3">
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold text-ink text-sm truncate">{staffName}</p>
+                  <p className="text-xs text-ink-muted">{role}</p>
+                </div>
+                <div className="text-right flex-shrink-0">
+                  <p className="text-sm font-bold text-ink">
+                    {fmt(total)} <span className="text-[10px] font-normal text-ink-muted">tổng</span>
+                  </p>
+                  <p className="text-[11px] mt-0.5">
+                    <span className="text-emerald-600 font-bold">{latestPct.toFixed(0)}%</span>
+                    <span className="text-ink-muted"> mới · </span>
+                    <span className="text-slate-500 font-semibold">{oldPct.toFixed(0)}%</span>
+                    <span className="text-ink-muted"> cũ</span>
+                  </p>
+                </div>
+              </div>
+
+              {/* Stacked horizontal bar */}
+              <div className="flex h-6 rounded-lg overflow-hidden bg-surface-2 mb-2 border border-border">
+                {sorted.map(m => {
+                  const val = getValue(m);
+                  const pct = total > 0 ? (val / total) * 100 : 0;
+                  if (pct < 0.2) return null;
+                  return (
+                    <div
+                      key={m.period}
+                      style={{ width: `${pct}%`, backgroundColor: periodColors.get(m.period) }}
+                      className="flex items-center justify-center text-[10px] font-bold text-white overflow-hidden"
+                      title={`${periodLabelMap.get(m.period) ?? m.period}: ${fmt(val)} (${pct.toFixed(1)}%) · ${m.videoCount} video`}
+                    >
+                      {pct >= 10 && `${pct.toFixed(0)}%`}
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Monthly breakdown grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-x-3 gap-y-1 text-xs">
+                {sorted.map(m => {
+                  const val = getValue(m);
+                  const pct = total > 0 ? (val / total) * 100 : 0;
+                  return (
+                    <div key={m.period} className="flex items-center gap-1.5 min-w-0">
+                      <span className="w-2.5 h-2.5 rounded-sm flex-shrink-0" style={{ backgroundColor: periodColors.get(m.period) }} />
+                      <span className="text-ink-muted truncate">{periodLabelMap.get(m.period) ?? m.period}:</span>
+                      <span className="text-ink font-semibold whitespace-nowrap">{fmt(val)}</span>
+                      <span className="text-ink-muted whitespace-nowrap">({pct.toFixed(0)}%) · {m.videoCount}v</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ── Trend summary cards ────────────────────────────────────────────────────────
+// Trend can be computed against either views or watch-time. The algorithm
+// mirrors computeTrends() in analytics.ts — same half-split moving average ratio.
+interface LocalTrend {
+  staffName:   string;
+  role:        string;
+  score:       number;
+  label:       TrendLabel;
+  periodCount: number;
+  latestValue: number;
+}
+
+function computeLocalTrends(
+  allMetrics: StaffPeriodMetrics[],
+  getValue:   (m: StaffPeriodMetrics) => number,
+): LocalTrend[] {
+  const groups = new Map<string, StaffPeriodMetrics[]>();
+  for (const m of allMetrics) {
+    const key = `${m.staffName}::${m.role}`;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key)!.push(m);
+  }
+
+  const avg = (xs: number[]) => xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : 0;
+  const labelOf = (score: number): TrendLabel => {
+    if (score >= 1.2) return "rising_strong";
+    if (score >= 1.0) return "rising";
+    if (score >= 0.8) return "stable";
+    if (score >= 0.6) return "declining";
+    return "declining_severe";
+  };
+
+  const out: LocalTrend[] = [];
+  for (const [key, metrics] of groups) {
+    const [staffName, role] = key.split("::");
+    const sorted      = [...metrics].sort((a, b) => a.period.localeCompare(b.period));
+    const values      = sorted.map(getValue);
+    const latestValue = values[values.length - 1] ?? 0;
+    const periodCount = sorted.length;
+
+    if (sorted.length < 2) {
+      out.push({ staffName, role, score: 1, label: "insufficient_data", periodCount, latestValue });
+      continue;
+    }
+
+    const half      = Math.floor(sorted.length / 2);
+    const prevAvg   = avg(values.slice(0, half));
+    const recentAvg = avg(values.slice(values.length - half));
+    const score     = prevAvg > 0 ? recentAvg / prevAvg : 1;
+
+    out.push({
+      staffName, role,
+      score:       Math.round(score * 100) / 100,
+      label:       labelOf(score),
+      periodCount,
+      latestValue,
+    });
+  }
+
+  return out.sort((a, b) => b.score - a.score);
+}
+
+function TrendCards({
+  allMetrics, hasWatchTime,
+}: {
+  allMetrics:   StaffPeriodMetrics[];
+  hasWatchTime: boolean;
+}) {
+  const [mode, setMode] = useState<"views" | "watchTime">("views");
+
+  // Auto-fallback to views if watch time disappears
+  const activeMode = mode === "watchTime" && !hasWatchTime ? "views" : mode;
+
+  const trends = useMemo(
+    () => computeLocalTrends(
+      allMetrics,
+      activeMode === "views" ? m => m.weightedViews : m => m.totalWatchTime,
+    ),
+    [allMetrics, activeMode],
+  );
+
+  const fmt       = activeMode === "views" ? fmtViews : fmtWatchTime;
+  const unitLabel = activeMode === "views" ? "views"  : "giờ xem";
+
+  return (
+    <div className="space-y-4">
+      {/* Mode toggle */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <span className="text-xs text-ink-muted mr-1">Xu hướng theo:</span>
+        {(["views", "watchTime"] as const).map(m => {
+          const disabled = m === "watchTime" && !hasWatchTime;
+          const isActive = activeMode === m;
+          return (
+            <button
+              key={m}
+              onClick={() => !disabled && setMode(m)}
+              disabled={disabled}
+              title={disabled ? "File upload chưa có cột Thời gian xem (giờ)" : undefined}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
+                isActive
+                  ? "bg-accent text-white border-accent shadow-sm"
+                  : disabled
+                    ? "bg-surface-2 text-ink-muted border-border opacity-50 cursor-not-allowed"
+                    : "bg-surface-2 text-ink-muted border-border hover:text-ink"
+              }`}
+            >
+              {m === "views" ? "Views" : "Giờ xem"}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Cards grid */}
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        {trends.map(t => {
+          const cfg = TREND_CONFIG[t.label];
+          return (
+            <div key={`${t.staffName}::${t.role}`} className="card p-4 flex items-center gap-4">
+              <div className="flex-1 min-w-0">
+                <p className="font-bold text-ink text-sm truncate">{t.staffName}</p>
+                <p className="text-xs text-ink-muted">{t.role} · {t.periodCount} tháng</p>
+              </div>
+              <div className="text-right">
+                <span className={`text-xs font-bold px-2.5 py-1 rounded-full border ${cfg.badge}`}>
+                  {cfg.icon} {cfg.label}
+                </span>
+                <p className="text-xs text-ink-muted mt-1">
+                  {fmt(t.latestValue)} {unitLabel} tháng gần nhất
+                </p>
+              </div>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -615,6 +895,15 @@ export default function TrendTab({ allMetrics, trends }: Props) {
         </CollapsibleBlock>
       )}
 
+      {/* Freshness — video mới vs cũ */}
+      <CollapsibleBlock title="Phân bổ theo tháng xuất bản — Video mới vs cũ">
+        <FreshnessBreakdown
+          allMetrics={allMetrics}
+          periods={periods}
+          periodLabelMap={periodLabelMap}
+        />
+      </CollapsibleBlock>
+
       {/* Pie charts section */}
       <CollapsibleBlock title="Tỷ lệ đóng góp theo tháng">
         <div className="space-y-4">
@@ -706,7 +995,7 @@ export default function TrendTab({ allMetrics, trends }: Props) {
       {/* Trend summary cards */}
       {trends.length > 0 && (
         <CollapsibleBlock title="Xu hướng tổng hợp" defaultOpen={false}>
-          <TrendCards trends={trends} />
+          <TrendCards allMetrics={allMetrics} hasWatchTime={hasWatchTime} />
         </CollapsibleBlock>
       )}
     </div>
