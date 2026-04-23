@@ -37,6 +37,12 @@ function fmtViews(v: number) {
   if (v >= 1_000)     return `${(v / 1_000).toFixed(0)}K`;
   return v.toLocaleString("vi-VN");
 }
+function fmtWatchTime(v: number) {
+  if (v >= 1_000_000) return `${(v / 1_000_000).toFixed(1)}Mh`;
+  if (v >= 1_000)     return `${(v / 1_000).toFixed(1)}Kh`;
+  if (v >= 10)        return `${v.toFixed(0)}h`;
+  return `${v.toFixed(1)}h`;
+}
 
 // ── Series & slice types ──────────────────────────────────────────────────────
 interface Series {
@@ -499,11 +505,14 @@ export default function TrendTab({ allMetrics, trends }: Props) {
     });
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const viewsSeries   = useMemo(() => buildSeries(m => m.weightedViews), [staffKeys, periods, lookup]);
+  const viewsSeries     = useMemo(() => buildSeries(m => m.weightedViews),  [staffKeys, periods, lookup]);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const revenueSeries = useMemo(() => buildSeries(m => m.totalRevenue),  [staffKeys, periods, lookup]);
+  const revenueSeries   = useMemo(() => buildSeries(m => m.totalRevenue),   [staffKeys, periods, lookup]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const watchTimeSeries = useMemo(() => buildSeries(m => m.totalWatchTime), [staffKeys, periods, lookup]);
 
-  const hasRevenue = revenueSeries.some(s => s.data.some(v => v > 0));
+  const hasRevenue   = revenueSeries.some(s => s.data.some(v => v > 0));
+  const hasWatchTime = watchTimeSeries.some(s => s.data.some(v => v > 0));
 
   // Toggle handlers
   const toggle  = (key: string) => setHiddenKeys(prev => {
@@ -591,6 +600,21 @@ export default function TrendTab({ allMetrics, trends }: Props) {
         </CollapsibleBlock>
       )}
 
+      {/* Watch time line chart */}
+      {hasWatchTime && (
+        <CollapsibleBlock title="Thời gian xem (giờ) theo thời gian">
+          <LineChart
+            title=""
+            subtitle="Tổng thời gian xem (giờ) của từng nhân sự qua các lịch sử đã lưu. Chỉ tính video có dữ liệu watch time."
+            periods={periods}
+            periodLabels={periodLabelMap}
+            series={watchTimeSeries}
+            hiddenKeys={hiddenKeys}
+            formatY={fmtWatchTime}
+          />
+        </CollapsibleBlock>
+      )}
+
       {/* Pie charts section */}
       <CollapsibleBlock title="Tỷ lệ đóng góp theo tháng">
         <div className="space-y-4">
@@ -640,10 +664,12 @@ export default function TrendTab({ allMetrics, trends }: Props) {
                 "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3"
               }`}>
                 {activePiePeriods.map(p => {
-                  const label       = periodLabelMap.get(p) ?? p;
-                  const viewSlices  = buildPeriodSlices(p, viewsSeries);
-                  const revSlices   = buildPeriodSlices(p, revenueSeries);
-                  const pHasRevenue = revSlices.some(s => s.value > 0);
+                  const label         = periodLabelMap.get(p) ?? p;
+                  const viewSlices    = buildPeriodSlices(p, viewsSeries);
+                  const revSlices     = buildPeriodSlices(p, revenueSeries);
+                  const watchSlices   = buildPeriodSlices(p, watchTimeSeries);
+                  const pHasRevenue   = revSlices.some(s => s.value > 0);
+                  const pHasWatchTime = watchSlices.some(s => s.value > 0);
                   return (
                     <div key={p} className="space-y-4 border border-border rounded-xl p-4">
                       <PieChart
@@ -652,6 +678,14 @@ export default function TrendTab({ allMetrics, trends }: Props) {
                         formatValue={fmtViews}
                         stacked={stacked}
                       />
+                      {hasWatchTime && pHasWatchTime && (
+                        <PieChart
+                          title={`Thời gian xem — ${label}`}
+                          slices={watchSlices}
+                          formatValue={fmtWatchTime}
+                          stacked={stacked}
+                        />
+                      )}
                       {hasRevenue && pHasRevenue && (
                         <PieChart
                           title={`Doanh thu — ${label}`}
