@@ -3,7 +3,7 @@ import * as XLSX from "xlsx";
 import { v4 as uuid } from "uuid";
 import type { StaffMember, VideoRow } from "@/types";
 import { GROUPS } from "@/config/groups";
-import { parseStaffSheet, type StaffSheetMode } from "@/lib/parsers/staff-sheet";
+import { parseStaffSheet, type StaffSheetMode, type DuplicateVideoInfo } from "@/lib/parsers/staff-sheet";
 import { groupVideosByStaff } from "@/lib/services/staff-video-filter";
 import StaffCard from "./StaffCard";
 
@@ -35,6 +35,8 @@ export default function StaffPanel({
   const [importMsg,    setImportMsg]    = useState<{ ok: boolean; text: string } | null>(null);
   const [isDragging,   setIsDragging]   = useState(false);
   const [importMode,   setImportMode]   = useState<StaffSheetMode>("tien-do");
+  const [duplicates,   setDuplicates]   = useState<DuplicateVideoInfo[]>([]);
+  const [showDupDetail, setShowDupDetail] = useState(false);
 
   // ── Parse helpers ──────────────────────────────────────────────────────────
 
@@ -45,6 +47,10 @@ export default function StaffPanel({
   const parseRawStaffFile = (buffer: ArrayBuffer, mode: StaffSheetMode): StaffMember[] | null => {
     const result = parseStaffSheet(buffer, mode);
     if (!result.success) return null;
+
+    // Capture duplicates from parse result
+    setDuplicates(result.duplicates);
+    setShowDupDetail(false);
 
     const groups = groupVideosByStaff(result.rows);
     const imported: StaffMember[] = [];
@@ -272,6 +278,45 @@ export default function StaffPanel({
           )}
         </div>
       </div>
+      {/* --- Duplicate warning --- */}
+      {duplicates.length > 0 && (
+        <div className="mb-6 card border-amber-200 bg-amber-50 overflow-hidden">
+          <div className="px-5 py-3 flex items-center justify-between">
+            <p className="text-sm font-semibold text-amber-800">
+              ⚠ {duplicates.length} video bị trùng lặp trong file
+              <span className="font-normal text-amber-600 ml-1">(xuất hiện ở nhiều dòng)</span>
+            </p>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setShowDupDetail(!showDupDetail)}
+                className="text-xs font-medium text-amber-700 hover:text-amber-900 px-2 py-1 rounded-lg hover:bg-amber-100 transition-colors"
+              >
+                {showDupDetail ? "Ẩn ▲" : "Xem chi tiết ▼"}
+              </button>
+              <button
+                onClick={() => setDuplicates([])}
+                className="text-xs text-amber-400 hover:text-amber-600 px-1.5 py-1 rounded-lg hover:bg-amber-100 transition-colors"
+              >
+                ✕
+              </button>
+            </div>
+          </div>
+          {showDupDetail && (
+            <div className="border-t border-amber-200 px-5 py-3 space-y-2 max-h-64 overflow-y-auto">
+              {duplicates.map((d) => (
+                <div key={d.videoId} className="flex items-start gap-3 text-xs">
+                  <code className="font-mono text-amber-800 bg-amber-100 px-1.5 py-0.5 rounded shrink-0">{d.videoId}</code>
+                  <span className="text-amber-700 flex-1 truncate" title={d.title}>{d.title}</span>
+                  <span className="text-amber-500 shrink-0">
+                    {d.count}× (dòng {d.rowIndices.join(", ")})
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       <input ref={importRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleImportFile} />
 
       {/* --- Inline weight editor --- */}

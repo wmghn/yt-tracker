@@ -23,12 +23,20 @@ export interface StaffSheetRow {
   rowIndex:    number;
 }
 
+export interface DuplicateVideoInfo {
+  videoId:    string;
+  title:      string;
+  rowIndices: number[];   // all row numbers where this videoId appears
+  count:      number;
+}
+
 export interface StaffSheetParseSuccess {
-  success:   true;
-  rows:      StaffSheetRow[];
-  skipped:   number;
-  allStaff:  string[];
-  headerRow: number;
+  success:    true;
+  rows:       StaffSheetRow[];
+  skipped:    number;
+  allStaff:   string[];
+  headerRow:  number;
+  duplicates: DuplicateVideoInfo[];  // videos appearing on multiple rows
 }
 
 export interface StaffSheetParseFailure {
@@ -151,6 +159,8 @@ export function parseStaffSheet(buffer: ArrayBuffer, mode: StaffSheetMode = "tie
     const allRows:     StaffSheetRow[] = [];
     const allStaff     = new Set<string>();
     const existingIds  = new Set<string>();
+    // Track ALL occurrences for duplicate detection (before dedup)
+    const videoOccurrences = new Map<string, { title: string; rowIndices: number[] }>();
     let   totalSkipped = 0;
     let   firstHeaderRow = 1;
     let   parsedSheets = 0;
@@ -166,6 +176,16 @@ export function parseStaffSheet(buffer: ArrayBuffer, mode: StaffSheetMode = "tie
       parsedSheets++;
       if (parsedSheets === 1) firstHeaderRow = result.headerRow;
 
+      // Track all occurrences for duplicate detection
+      for (const row of result.rows) {
+        const existing = videoOccurrences.get(row.videoId);
+        if (existing) {
+          existing.rowIndices.push(row.rowIndex);
+        } else {
+          videoOccurrences.set(row.videoId, { title: row.title || row.videoId, rowIndices: [row.rowIndex] });
+        }
+      }
+
       // Merge rows, deduplicate by videoId (first sheet wins on duplicates)
       for (const row of result.rows) {
         if (!existingIds.has(row.videoId)) {
@@ -176,6 +196,19 @@ export function parseStaffSheet(buffer: ArrayBuffer, mode: StaffSheetMode = "tie
 
       result.staffSet.forEach((n) => allStaff.add(n));
       totalSkipped += result.skipped;
+    }
+
+    // Build duplicates list — only videos appearing 2+ times
+    const duplicates: DuplicateVideoInfo[] = [];
+    for (const [videoId, info] of videoOccurrences) {
+      if (info.rowIndices.length >= 2) {
+        duplicates.push({
+          videoId,
+          title: info.title,
+          rowIndices: info.rowIndices,
+          count: info.rowIndices.length,
+        });
+      }
     }
 
     if (parsedSheets === 0) {
@@ -192,11 +225,12 @@ export function parseStaffSheet(buffer: ArrayBuffer, mode: StaffSheetMode = "tie
     }
 
     return {
-      success:   true,
-      rows:      allRows,
-      skipped:   totalSkipped,
-      allStaff:  [...allStaff].sort(),
-      headerRow: firstHeaderRow,
+      success:    true,
+      rows:       allRows,
+      skipped:    totalSkipped,
+      allStaff:   [...allStaff].sort(),
+      headerRow:  firstHeaderRow,
+      duplicates,
     };
   } catch (e) {
     return { success: false, error: `Lỗi đọc file: ${String(e)}` };
