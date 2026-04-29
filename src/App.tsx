@@ -272,8 +272,8 @@ export default function App() {
 
   // ── Results ───────────────────────────────────────────────────────────────────
 
-  // Separate shorts (< 90s) from long videos — shorts are excluded from attribution
-  const SHORTS_THRESHOLD = 90; // seconds
+  // Separate shorts (< 180s) from long videos — shorts are excluded from attribution
+  const SHORTS_THRESHOLD = 180; // seconds
   const longVideos  = state.videos.filter((v) => !v.duration || v.duration >= SHORTS_THRESHOLD);
   const shortVideos = state.videos.filter((v) => v.duration !== undefined && v.duration < SHORTS_THRESHOLD);
 
