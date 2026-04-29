@@ -11,6 +11,7 @@ interface ParseState {
   status: "idle" | "success" | "error";
   message?: string; videoCount?: number; skipped?: number;
   columns?: ColStatus[]; detectedOptional?: OptionalColumnKey[]; videos?: VideoRow[];
+  missingViews?: number; fileTotalViews?: number; parsedTotalViews?: number;
 }
 
 export default function UploadZone({ onSuccess }: Props) {
@@ -31,7 +32,8 @@ export default function UploadZone({ onSuccess }: Props) {
     const reqCols: ColStatus[] = Object.entries(REQUIRED_COLUMNS).map(([, name]) => ({ key: name, label: name, found: true, required: true }));
     const optCols: ColStatus[] = (parsed.detectedOptional ?? []).map((key) => ({ key, label: OPTIONAL_COLUMN_LABELS[key], found: true, required: false }));
     setResult({ status: "success", videoCount: parsed.rows.length, skipped: parsed.skipped,
-      columns: [...reqCols, ...optCols], detectedOptional: parsed.detectedOptional, videos: parsed.rows, message: filename });
+      columns: [...reqCols, ...optCols], detectedOptional: parsed.detectedOptional, videos: parsed.rows, message: filename,
+      missingViews: parsed.missingViews, fileTotalViews: parsed.fileTotalViews, parsedTotalViews: parsed.parsedTotalViews });
   };
 
   const readFile = (file: File) => {
@@ -97,6 +99,24 @@ export default function UploadZone({ onSuccess }: Props) {
                   </div>
                 ))}
               </div>
+              {/* Missing views warning */}
+              {result.missingViews !== undefined && result.missingViews > 0 && (
+                <div className="mb-4 p-4 rounded-xl bg-amber-50 border border-amber-200">
+                  <div className="flex items-start gap-3">
+                    <span className="text-amber-600 text-lg leading-none mt-0.5">⚠</span>
+                    <div className="flex-1">
+                      <p className="text-sm font-semibold text-amber-800">
+                        Bảng export thiếu video — chênh lệch {result.missingViews.toLocaleString("vi-VN")} views
+                      </p>
+                      <p className="text-xs text-amber-600 mt-1">
+                        Tổng "Số lượt xem" trong file: {result.fileTotalViews!.toLocaleString("vi-VN")} —
+                        nhưng tổng từ {result.videoCount} video đã parse: {result.parsedTotalViews!.toLocaleString("vi-VN")}.
+                        File YouTube Analytics export có thể không liệt kê đủ hết video.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
               <button className="btn-primary w-full text-base" onClick={() => onSuccess(result.videos!, result.detectedOptional!)}>
                 Tiếp theo →
               </button>

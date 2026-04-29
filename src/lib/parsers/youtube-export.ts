@@ -97,6 +97,12 @@ export interface ParseSuccess {
   rows: VideoRow[];
   detectedOptional: OptionalColumnKey[];
   skipped: number;
+  /** Total views from the "Tổng" row (row 2) — undefined if not found */
+  fileTotalViews?: number;
+  /** Sum of views from all parsed video rows */
+  parsedTotalViews: number;
+  /** Views missing = fileTotalViews - parsedTotalViews (only when fileTotalViews exists) */
+  missingViews?: number;
 }
 
 export interface ParseFailure {
@@ -164,6 +170,17 @@ export function parseYouTubeExport(buffer: ArrayBuffer): ParseResult {
     const rows: VideoRow[] = [];
     let skipped = 0;
 
+    // Read "Tổng" row (row index 1) to get file-level total views
+    let fileTotalViews: number | undefined;
+    if (raw.length >= 2) {
+      const totalsRow = raw[1] as unknown[];
+      if (totalsRow?.length && colMap.required.views !== undefined) {
+        const rawVal = String(totalsRow[colMap.required.views] ?? "").replace(/,/g, "").replace(/\./g, "");
+        const parsed = parseInt(rawVal, 10);
+        if (!isNaN(parsed) && parsed > 0) fileTotalViews = parsed;
+      }
+    }
+
     // Data starts at row index 2 (skip header row 0 and totals row 1)
     for (let i = 2; i < raw.length; i++) {
       const row = raw[i] as unknown[];
@@ -224,11 +241,19 @@ export function parseYouTubeExport(buffer: ArrayBuffer): ParseResult {
       return { success: false, error: "Không tìm thấy dòng video nào từ dòng 3 trở đi." };
     }
 
+    const parsedTotalViews = rows.reduce((s, v) => s + v.views, 0);
+    const missingViews = fileTotalViews !== undefined && fileTotalViews > parsedTotalViews
+      ? fileTotalViews - parsedTotalViews
+      : undefined;
+
     return {
       success: true,
       rows,
       detectedOptional: Object.keys(colMap.optional) as OptionalColumnKey[],
       skipped,
+      fileTotalViews,
+      parsedTotalViews,
+      missingViews,
     };
   } catch {
     return {
