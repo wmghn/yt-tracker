@@ -158,7 +158,7 @@ export function parseStaffSheet(buffer: ArrayBuffer, mode: StaffSheetMode = "tie
 
     const allRows:     StaffSheetRow[] = [];
     const allStaff     = new Set<string>();
-    const existingIds  = new Set<string>();
+    const existingIds  = new Map<string, number>();  // videoId → index in allRows
     // Track ALL occurrences for duplicate detection (before dedup)
     const videoOccurrences = new Map<string, { title: string; rowIndices: number[] }>();
     let   totalSkipped = 0;
@@ -186,11 +186,21 @@ export function parseStaffSheet(buffer: ArrayBuffer, mode: StaffSheetMode = "tie
         }
       }
 
-      // Merge rows, deduplicate by videoId (first sheet wins on duplicates)
+      // Merge rows, deduplicate by videoId — merge staffNames from duplicate rows
       for (const row of result.rows) {
         if (!existingIds.has(row.videoId)) {
-          allRows.push(row);
-          existingIds.add(row.videoId);
+          // First occurrence: add the row (clone staffNames to avoid mutation)
+          allRows.push({ ...row, staffNames: [...row.staffNames] });
+          existingIds.set(row.videoId, allRows.length - 1);
+        } else {
+          // Duplicate: merge staff names into the existing row
+          const existingIdx = existingIds.get(row.videoId)!;
+          const existingRow = allRows[existingIdx];
+          for (const name of row.staffNames) {
+            if (!existingRow.staffNames.includes(name)) {
+              existingRow.staffNames.push(name);
+            }
+          }
         }
       }
 
